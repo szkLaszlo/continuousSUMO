@@ -4,24 +4,15 @@ as a project of TRAFFIC MODELLING, SIMULATION AND CONTROL subject
 """
 
 import copy
-import math
 import os
 import platform
 import random
-import warnings
 
 import gym
-import matplotlib.pyplot as plt
 import numpy as np
 import traci
 import traci.constants as tc
 from gym import spaces
-
-grid_per_meter = 4  # Defines the precision of the returned image
-x_range = 50  # symmetrically for front and back
-x_range_grid = x_range * grid_per_meter  # symmetrically for front and back
-y_range = 9  # symmetrically for left and right
-y_range_grid = y_range * grid_per_meter  # symmetrically for left and right
 
 
 class SUMOEnvironment(gym.Env):
@@ -29,187 +20,179 @@ class SUMOEnvironment(gym.Env):
 
     """
 
-    def __init__(self):
+    def __init__(self, simulation_directory='D:\\msc\\forth\\traffic\\continuousSUMOv1\\sim_conf', type_os="image",
+                 type_as="continuous"):
 
         # Basic gym environment variables
-        self.observation_space = None
-        self.action_space = None
-        self.reward_range = None
+        self.setup_observation_space(type_os=type_os)
+        self.type_as = type_as
+        self.type_os = type_os
+        self.setup_action_space()
+        self.setup_reward_system(reward_type=reward_type)
         self._max_episode_steps = 2500
+        self.rendering = True if mode == 'human' else False
+
         # Simulation data and constants
         self.sumoBinary = None
         self.sumoCmd = None
-        self.reward_dict = None
-        self.rendering = None
-        self.max_ego_start_position = 300
-        # variable defining how many vehicles must exist on the road before ego is chosen.
-        self.min_departed_vehicles = 1
+        self.simulation_list = self.get_possible_simulations(simulation_directory)
+        self.min_departed_vehicles = 5
         # variable for desired speed random change (after x time steps)
-        self.time_to_change_des_speed = 100
+        self.time_to_change_des_speed = change_speed_interval
 
-        # setting basic environment variables
-        self.dt = None
-        self.lane_width = None
-        self.lane_offset = None # Defines the 0 first lane offset from 0.
-        self.steps_done = 0
-        self.egoID = None
-        self.state = None
-        self.desired_speed = None
-        self.lane_change_counter = 0
+        self.start()
+        self.reset()
 
-
-
-    def setup_observation_space(self, type_os="image"):
+    def setup_observation_space(self):
         """
         This function is responsible for creating the desired observation space.
         :type: describes what the observation space will be
         """
-        if type_os == "image":
-            print()
-            self.observation_space = np.zeros((2 * x_range_grid, 2 * y_range_grid, 3))
+        if self.type_os == "image":
+            self.grid_per_meter = 4  # Defines the precision of the returned image
+            x_range = 50  # symmetrically for front and back
+            self.x_range_grid = x_range * self.grid_per_meter  # symmetrically for front and back
+            y_range = 9  # symmetrically for left and right
+            self.y_range_grid = y_range * self.grid_per_meter  # symmetrically for left and right
+            self.observation_space = np.zeros((2 * self.x_range_grid, 2 * self.y_range_grid, 3))
+            # Assigning the environment call
+            self.get_environment = self.calculate_image_environment
 
-        elif type_os == "structured":
-            print()
+        # elif type_os == "structured": todo: create discrete observation space
         else:
             raise RuntimeError("This type of observation space is not yet implemented.")
 
-    def setup_action_space(self, number_of_actions, type_as="continuous"):
+    def setup_action_space(self):
         """
         This function is responsible for creating the desired action space.
         :number_of_actions: describes how many actions can the agent take.
-        :type: describes what the action space will look like
         """
-        if type_as == "continuous":
-            print()
-            self.action_space = spaces.Box(low, high, dtype=np.float)  # spaces.Discrete(9)
+        if self.type_as == "continuous":
+            # todo: hardcoded range of actions, first is steer 2. is acceleration command
+            # todo: radian or degree???
+            low = np.array([-1, -1])
+            high = np.array([1, 1])
+            self.action_space = spaces.Box(low, high, dtype=np.float)
+            self.calculate_action = self.calculate_continuous_action
 
-        elif type_as == "discrete":
-            print()
+        elif self.type_as == "discrete":
+            # todo: hardcoded steering and speed
+            self.steering_constant = [-1, 0, 1]  # [right, nothing, left] lane change
+            self.accel_constant = [-0.7, 0.0, 0.3]  # are in m/s
+            self.action_space = spaces.Discrete(9)
+            self.calculate_action = self.calculate_discrete_action
         else:
             raise RuntimeError("This type of action space is not yet implemented.")
 
-    def setup_reward_system(self, reward_dict):
+    def setup_reward_system(self, reward_type='basic'):
         """
         This should set how the different events are handled.
-        :reward_dict: Dict, containing rewards for the terminating cases. Immediate reward and Use of them.
+        :reward_type: selects the reward system
         """
-        self.reward_dict = {'collision': [True, 0],
-                            'slow': [True, 0],
-                            'left_highway': {True, 0},
-                            'immediate': [False, 0]}
+        # Bool shows if the event terminates, value shows how much it costs.
+        if reward_type == "basic":
+            self.reward_dict = {'collision': [True, 0],
+                                'slow': [True, 0],
+                                'left_highway': [True, 0],
+                                'immediate': [False, 1],
+                                'type': reward_type}
+        elif reward_type == 'speed':
+            self.reward_dict = {'collision': [True, 0],
+                                'slow': [True, 0],
+                                'left_highway': [True, 0],
+                                'immediate': [True, 1],
+                                'type': reward_type}
+        else:
+            raise RuntimeError("Reward system can not be found")
 
-    def setup_basic_environment_values(self):
+    def calculate_immediate_reward(self):
         """
-
+        In this function the possible immediate reward calculation models are implemented.
         :return:
         """
+        if self.reward_dict["type"] == "basic":
+            reward = self.reward_dict['immediate'][1]
+        elif self.reward_dict["type"] == 'speed':
+            reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
+                     / self.desired_speed
+        else:
+            raise RuntimeError('Reward type is not implemented')
+
+        if self.steps_done % self.time_to_change_des_speed == 0:
+            self.set_random_desired_speed()
+        return reward
+
+    # noinspection PyAttributeOutsideInit
+    def setup_basic_environment_values(self):
+        """
+        This is dedicated to reset the environment basic variables.
+        todo: Check all necessary reset when the model is ready
+        :return: None
+        """
         # setting basic environment variables
-        self.dt = None
-        self.lane_width = None
-        self.lane_offset = None  # Defines the 0 first lane offset from 0.
-        self.steps_done = 0
-        self.egoID = None
+        # Loading variables with real values from traci
+        # todo: hardcoded places of the highway.. this should be handled from code.
+        self.lane_width = traci.lane.getWidth('A_0')
+        self.lane_offset = traci.junction.getPosition('J1')[1] - 2 * self.lane_width - self.lane_width / 2
+        self.dt = traci.simulation.getDeltaT()
+        self.egoID = None  # Resetting chosen ego vehicle id
+        self.steps_done = 0  # resetting steps done
+        self.desired_speed = random.randint(120, 160) / 3.6
         self.state = None
-        self.desired_speed = None
         self.lane_change_counter = 0
+        self.time_to_change_des_speed = np.random.randint(100, 250)
+        self.ego_start_position = 10000  # used for result display
 
     def stop(self):
         """
-
-        :return:
+        Stops the simulation.
+        :return: None
         """
         traci.close()
 
     def start(self):
         """
         This function starts the SUMO connection and loads an initial simulation.
-        :return:
+        :return: None
         """
-        #todo: start this with base_sim_dir
         if "Windows" in platform.system():
             # Case for windows execution
-            if self.rendering:
-                self.sumoBinary = "C:/Sumo/bin/sumo-gui"
-                self.sumoCmd = [self.sumoBinary, "-c", "../envs/sim_conf/jatek.sumocfg", "--start", "--quit-on-end",
-                                "--collision.mingap-factor", "2", "--collision.action", "remove", "--no-warnings", "1",
-                                "--random"]
-            else:
-                self.sumoBinary = "C:/Sumo/bin/sumo"
-                self.sumoCmd = [self.sumoBinary, "-c", "../envs/sim_conf/no_gui.sumocfg", "--start", "--quit-on-end",
-                                "--collision.mingap-factor", "2", "--collision.action", "remove", "--no-warnings", "1",
-                                "--random"]
+            self.sumoBinary = "C:/Sumo/bin/sumo-gui" if self.rendering else "C:/Sumo/bin/sumo"
         else:
             # Case for linux execution
-            if self.rendering:
-                self.sumoBinary = "/usr/share/sumo/bin/sumo-gui"
-                self.sumoCmd = [self.sumoBinary, "-c", "../envs/sim_conf/jatek.sumocfg", "--start", "--quit-on-end",
-                                "--collision.mingap-factor", "2", "--collision.action", "remove", "--no-warnings", "1",
-                                "--random"]
-            else:
-                self.sumoBinary = "/usr/share/sumo/bin/sumo"
-                self.sumoCmd = [self.sumoBinary, "-c", "../envs/sim_conf/no_gui.sumocfg", "--start", "--quit-on-end",
-                                "--collision.mingap-factor", "2", "--collision.action", "remove", "--no-warnings", "1",
-                                "--random"]
+            self.sumoBinary = "/usr/share/sumo/bin/sumo-gui" if self.rendering else "/usr/share/sumo/bin/sumo"
+
+        self.sumoCmd = [self.sumoBinary, "-c", self.simulation_list[0], "--start", "--quit-on-end",
+                        "--collision.mingap-factor", "2", "--collision.action", "remove", "--no-warnings", "1",
+                        "--random"]
 
         traci.start(self.sumoCmd[:4])
 
     def reset(self):
         """
-
-        :return:
+        Resets the environment to initial state.
+        :return: The initial state
         """
-
-        if self.rendering is not None:
-            # this is for memory minimization
-            try:
-                for vehs in traci.vehicle.getIDList():
-                    del vehs
-            except KeyError:
-                pass
-            except AttributeError:
-                pass
-            except TypeError:
-                pass
-            # Changing configuration
-            self.choose_random_simulation()
-            # Loads traci configuration
-            traci.load(self.sumoCmd[1:])
-            # Loading variables with real values from traci
-            self.lane_width = traci.lane.getWidth('A_0')
-            self.lane_offset = traci.junction.getPosition('J1')[1] - 2 * self.lane_width - self.lane_width / 2
-            self.dt = traci.simulation.getDeltaT()
-            self.rewards = [0, 0, 0, 0]
-            self.egoID = None  # Resetting chosen ego vehicle id
-            self.steps_done = 0  # resetting steps done
-
-            self.desired_speed = random.randint(120, 160) / 3.6
-            self.state = None
-            self.ego_start_position = 100000
-            self.lanechange_counter = 0
-            self.wants_to_change = []
-            self.change_after = 0
-            self.min_departed_vehicles = 10 if "5" in self.sumoCmd[2] else np.random.randint(25, 80, 1).item()
-            self.time_to_change_des_speed = np.random.randint(100, 250)
-            # Running simulation until ego can be inserted
-            while self.egoID is None:
-                self.one_step()
-            # Getting initial environment state
-            self.environment_state = self.get_surroundings_env()
-            # Setting a starting speed of the ego
-            self.state['velocity'] = self.desired_speed
-            return self.environment_state
-        else:
-            raise RuntimeError('Please run render before reset!')
+        # Changing configuration
+        self.choose_random_simulation()
+        # Loads traci configuration
+        traci.load(self.sumoCmd[1:])
+        # Resetting configuration
+        self.setup_basic_environment_values()
+        # Running simulation until ego can be inserted
+        self.select_egos()
+        # Getting initial environment state
+        self.refresh_environment()
+        # Setting a starting speed of the ego
+        self.state['velocity'] = self.desired_speed
+        return self.environment_state
 
     def render(self, mode='human'):
         """
-
-        :param mode: runs the simulation with GUI
+        Basic function of the OpenAI gym, this does not need here anything
+        :param mode:
         """
-        if mode == 'human':
-            self.rendering = True
-        else:
-            self.rendering = False
+        pass
 
     def step(self, action):
         """
@@ -217,7 +200,6 @@ class SUMOEnvironment(gym.Env):
         :param action:
         :return:
         """
-        #        assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         new_x, last_x = 0, 0  # for reward calculation
         # Collecting the ids of online vehicles
         IDsOfVehicles = traci.vehicle.getIDList()
@@ -228,10 +210,9 @@ class SUMOEnvironment(gym.Env):
             # Selecting action to do
             ctrl = self.calculate_action(action)
             # Setting vehicle speed according to selected action
-            traci.vehicle.setSpeed(self.egoID,
-                                   min(max(self.state['velocity'] + ctrl[1], 0), 50))  # todo hardcoded max speed
-            if self.steps_done % self.time_to_change_des_speed == 0:
-                self.set_random_desired_speed()
+            new_speed = min(max(self.state['velocity'] + ctrl[1], 0), 50)  # todo hardcoded max speed
+            traci.vehicle.setSpeed(self.egoID, new_speed)
+
             self.wants_to_change.append(ctrl[0])  # Collecting change attempts
             # Checking if change attempts are enough to change lane
             if sum(self.wants_to_change) > self.change_after or sum(self.wants_to_change) < -self.change_after:
@@ -268,18 +249,13 @@ class SUMOEnvironment(gym.Env):
                 last_x = traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
                 is_ok, cause = self.one_step()
                 if is_ok:
-                    self.get_surroundings_env()
+                    self.refresh_environment()
                     new_x = traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
                 else:
                     new_x = last_x + max(self.state['velocity'] + ctrl[1], 0) * self.dt
         else:
             is_ok = False
             cause = None
-
-        # Setting ego to the middle of the screen if rendering is "human"
-        if self.egoID is not None and self.rendering and is_ok:
-            egoPos = traci.vehicle.getPosition(self.egoID)
-            traci.gui.setOffset('View #0', egoPos[0], egoPos[1])
 
         terminated = not is_ok
         if terminated and cause is not None:
@@ -299,65 +275,116 @@ class SUMOEnvironment(gym.Env):
                                                             'distance': new_x - self.ego_start_position,
                                                             'lane_change': self.lanechange_counter}
 
-    def select_egos(self, number_of_egos):
+    def select_egos(self, number_of_egos=1):
         """
         This selects the ego(s) from the environment. The ID of the cars are given back to the simulation
         :param number_of_egos: shows how many car to select from the simulation
         :return: ID list of ego(s)
         """
-        print()
-        return ['id']
+        while self.egoID is None:
+            traci.simulationStep()
+            # Collecting online vehicles
+            IDsOfVehicles = traci.vehicle.getIDList()
+            # Moving forward if ego can be inserted
+            if traci.simulation.getArrivedNumber() - 2 * traci.simulation.getCollidingVehiclesNumber() > 0 \
+                    and len(IDsOfVehicles) > self.min_departed_vehicles and self.egoID is None:
+                # Finding the last car on the highway
+                for carID in IDsOfVehicles:
+                    # todo: this search only works in the straight simulation
+                    if traci.vehicle.getPosition(carID)[0] < self.ego_start_position and \
+                            traci.vehicle.getSpeed(carID) > (60 / 3.6):
+                        # Saving ID and start position for ego vehicle
+                        self.egoID = carID
+                        self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
+                if self.egoID is None:
+                    self.egoID = IDsOfVehicles[-1]
+                    self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
+                # Setting ego simulation variables to be controlled by us (not SUMO)
+                lanes = [-2, -1, 0, 1, 2]
+                traci.vehicle.setLaneChangeMode(self.egoID, 0x0)
+                traci.vehicle.setSpeedMode(self.egoID, 0x0)
+                traci.vehicle.setColor(self.egoID, (255, 0, 0))
+                traci.vehicle.setType(self.egoID, 'ego')
+                traci.vehicle.setMinGap(self.egoID, 0)
+                traci.vehicle.setMinGapLat(self.egoID, 0)
 
+                traci.vehicle.setSpeedFactor(self.egoID, 2)
+                traci.vehicle.setSpeed(self.egoID, self.desired_speed)
+                traci.vehicle.setMaxSpeed(self.egoID, 50)
+                traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, 0.0,
+                                               [tc.VAR_SPEED, tc.VAR_LANE_INDEX, tc.VAR_ANGLE, tc.VAR_POSITION,
+                                                tc.VAR_LENGTH, tc.VAR_WIDTH])
+                traci.vehicle.addSubscriptionFilterLanes(lanes, noOpposite=True, downstreamDist=100.0,
+                                                         upstreamDist=100.0)
+                if self.rendering:
+                    traci.gui.trackVehicle('View #0', self.egoID)
 
-    def choose_random_simulation(self, sim_dir):
-        #todo: Automate this
-        self.rand_index = np.random.choice(np.arange(0, 6), p=[0.20, 0.15, 0.20, 0.20, 0.20, 0.05])
-        # self.rand_index = 0
-        # print(f"Simulation {self.rand_index} loaded.")
-        if "jatek" in self.sumoCmd[2]:
-            self.sumoCmd[2] = f"../envs/sim_conf/jatek_{self.rand_index}.sumocfg"
-        elif "no_gui" in self.sumoCmd[2]:
-            self.sumoCmd[2] = f"../envs/sim_conf/no_gui_{self.rand_index}.sumocfg"
+    def choose_random_simulation(self):
+        self.sumoCmd[2] = np.random.choice(self.simulation_list)
+
+    def get_possible_simulations(self, simulation_directory):
+        """
+        From given directory gets the simulation files and creates the file paths.
+        if rendering, simulations without 'no' will be loaded, otherwise them.
+        :param simulation_directory: Absolute path to the simulation folder with ".sumocfg"
+        :return: list of valid simulation paths
+        """
+        simulation_list = os.listdir(simulation_directory)
+        for item in list(simulation_list):
+            if not item.endswith('.sumocfg'):
+                simulation_list.remove(item)
+            else:
+                if item.__contains__('no'):
+                    if self.rendering:
+                        simulation_list.remove(item)
+                else:
+                    if not self.rendering:
+                        simulation_list.remove(item)
+        return [os.path.join(simulation_directory, item) for item in simulation_list]
 
     def set_random_desired_speed(self):
         """
         Function to set random speed of ego(s)
         """
-        #TODO: make this work for more ego
+        # TODO: make this work for more ego
         self.desired_speed = random.randint(130, 160) / 3.6
 
-    def calculate_action(self, action):
+    def calculate_discrete_action(self, action):
         """
-        This function is used to select the actions for steering and velocity change.
-        Parameters
-        ----------
-        action an int between 0 and 9
-
-        Returns a steering and velocity change action
-        -------
-
+        This is used to convert int action into steer and acceleration commands
+        :param action: Int
+        :return: [steering, acceleration] values
         """
-        st = [-1, 0, 1]  # [right, nothing, left] lane change
-        ac = [-0.7, 0.0, 0.3]  # are in m/s
+        steer = self.steering_constant[action // len(self.steering_constant)]
+        acc = self.accel_constant[action % len(self.accel_constant)]
+        return [steer, acc]
+
+    def calculate_continuous_action(self, action):
+        """
+        Calculate continuous action with or without batch
+        :param action: actions to select [batch x [steering, acceleration]] or [[steering, acceleration]]
+        :return: list of selected actions
+        """
         if isinstance(action, np.ndarray) and len(action.shape) > 1:
+            # this is for batch actions
             steer = action[:, 0]
             acc = action[:, 1]
-        elif isinstance(action, np.ndarray):
+            # todo: the disretization here is not solved. Find NICE solution
+        else:
+            # this is for single actions
             steer = action[0]
             acc = action[1]
-        else:  # isinstance(action, int):
-            steer = st[action // len(st)]
-            acc = ac[action % len(st)]
-        if steer > 0.35:
-            steer = 1
-        elif steer < -0.35:
-            steer = -1
-        else:
-            steer = 0
-        ctrl = [steer, acc]
-        return ctrl
+            # todo: currently it is here because of the lack of the lateral model
+            # It is a basic discretisation
+            if steer > 0.35:
+                steer = 1
+            elif steer < -0.35:
+                steer = -1
+            else:
+                steer = 0
+        return [steer, acc]
 
-    def calculate_image_environment(self):
+    def calculate_image_environment(self, environment_collection):
         """
 
         Returns: environment state in the shape of [1, range_x, range_y, 3]
@@ -365,11 +392,58 @@ class SUMOEnvironment(gym.Env):
         and ego state as a dict: {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
         -------
         """
+        ego_state = environment_collection[self.egoID]
+        # Creating state representation as a matrix (image)
+        environment_state = np.zeros((2 * self.x_range_grid, 2 * self.y_range_grid, 3))
+        # Drawing the image channels with actual data
+        for car_id in environment_collection.keys():
+            dx = int(np.rint((environment_collection[car_id]['x_position'] - ego_state[
+                "x_position"]) * self.grid_per_meter))
+            dy = int(np.rint((ego_state["y_position"] - environment_collection[car_id][
+                'y_position']) * self.grid_per_meter))
+            l = int(np.ceil(environment_collection[car_id]['length'] / 2 * self.grid_per_meter))
+            w = int(np.ceil(environment_collection[car_id]['width'] / 2 * self.grid_per_meter))
+
+            # Only if car is in the range
+            if (abs(dx) < (self.x_range_grid - environment_collection[car_id]['length'] / 2 * self.grid_per_meter)) \
+                    and abs(dy) < (
+                    self.y_range_grid - environment_collection[car_id]['width'] / 2 * self.grid_per_meter):
+
+                # Drawing speed of the current car
+                environment_state[self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                self.y_range_grid + dy - w:self.y_range_grid + dy + w, 0] += np.ones_like(
+                    environment_state[self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                    self.y_range_grid + dy - w:self.y_range_grid + dy + w, 0]) * environment_collection[car_id][
+                                                                                 'velocity'] / 50
+
+                # Drawing lane of the current car
+                environment_state[self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                self.y_range_grid + dy - w:self.y_range_grid + dy + w, 1] += np.ones_like(
+                    environment_state[self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                    self.y_range_grid + dy - w:self.y_range_grid + dy + w, 1]) * environment_collection[car_id][
+                                                                                 'lane_id'] / 2
+
+                # If ego, drawing the desired speed
+                if car_id == self.egoID:
+                    environment_state[self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                    self.y_range_grid + dy - w:self.y_range_grid + dy + w,
+                    2] += np.ones_like(
+                        environment_state[self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                        self.y_range_grid + dy - w:self.y_range_grid + dy + w,
+                        2]) * self.desired_speed / 50
+        # filename = os.path.join(os.path.curdir, "scenarios", f"{self.steps_done}.jpg")
+        # plt.imsave(filename, environment_state)
+        return environment_state, ego_state
+
+    def get_simulation_environment(self):
+        """
+        Function for getting the cars and their attributes from SUMO.
+        :return: A car_id dict with {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
+        """
         # Getting cars around ego vehicle
         cars_around = traci.vehicle.getContextSubscriptionResults(self.egoID)
-        ego_state = {}
         # Collecting car details
-        environment_collection = []
+        environment_collection = {}
         for car_id, car in cars_around.items():
             car_state = {'x_position': car[tc.VAR_POSITION][0] - car[tc.VAR_LENGTH] / 2,
                          'y_position': car[tc.VAR_POSITION][1],
@@ -378,58 +452,22 @@ class SUMOEnvironment(gym.Env):
                          'velocity': car[tc.VAR_SPEED],
                          'lane_id': car[tc.VAR_LANE_INDEX],
                          'heading': car[tc.VAR_ANGLE]}
-            # Saving ego state
-            if car_id == self.egoID:
-                ego_state = copy.copy(car_state)
-            environment_collection.append(copy.copy(car_state))
+            environment_collection[car_id] = copy.copy(car_state)
+        return environment_collection
 
-        # Creating state representation as a matrix (image)
-        state_matrix = np.zeros((2 * x_range_grid, 2 * y_range_grid, 3))
-        # Drawing the image channels with actual data
-        for element in environment_collection:
-            dx = int(np.rint((element['x_position'] - ego_state["x_position"]) * grid_per_meter))
-            dy = int(np.rint((ego_state["y_position"] - element['y_position']) * grid_per_meter))
-            l = int(np.ceil(element['length'] / 2 * grid_per_meter))
-            w = int(np.ceil(element['width'] / 2 * grid_per_meter))
-
-            # Only if car is in the range
-            if (abs(dx) < (x_range_grid - element['length'] / 2 * grid_per_meter)) and \
-                    abs(dy) < (y_range_grid - element['width'] / 2 * grid_per_meter):
-
-                # Drawing speed of the current car
-                state_matrix[x_range_grid + dx - l:x_range_grid + dx + l,
-                y_range_grid + dy - w:y_range_grid + dy + w, 0] += np.ones_like(
-                    state_matrix[x_range_grid + dx - l:x_range_grid + dx + l,
-                    y_range_grid + dy - w:y_range_grid + dy + w, 0]) * element['velocity'] / 50
-
-                # Drawing lane of the current car
-                state_matrix[x_range_grid + dx - l:x_range_grid + dx + l,
-                y_range_grid + dy - w:y_range_grid + dy + w, 1] += np.ones_like(
-                    state_matrix[x_range_grid + dx - l:x_range_grid + dx + l,
-                    y_range_grid + dy - w:y_range_grid + dy + w, 1]) * element['lane_id'] / 2
-
-                # If ego, drawing the desired speed
-                if math.isclose(dx, 0) and math.isclose(dy, 0):
-                    state_matrix[x_range_grid + dx - l:x_range_grid + dx + l,
-                    y_range_grid + dy - w:y_range_grid + dy + w,
-                    2] += np.ones_like(
-                        state_matrix[x_range_grid + dx - l:x_range_grid + dx + l,
-                        y_range_grid + dy - w:y_range_grid + dy + w,
-                        2]) * self.desired_speed / 50
-        filename = os.path.join(os.path.curdir, "scenarios", f"{self.steps_done}.jpg")
-        plt.imsave(filename, state_matrix)
-        return state_matrix, ego_state
-
-    def get_surroundings_env(self):
+    def refresh_environment(self):
         """
-        This is used to call environment surroundings
-        Returns: environment state in the shape of [1, range_x, range_y, 3]
+        This is used to refresh the environment
+        Sets environment state in the shape of [1, range_x, range_y, 3]
+        and state in {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
         where the last dimension is the channels of speed, lane_id, and desired speed
         -------
 
         """
-        self.environment_state, self.state = self.calculate_image_environment()
-        return self.environment_state
+
+        environment_collection = self.get_simulation_environment()
+        # todo: here will be the lateral calculation for state i guess
+        self.environment_state, self.state = self.get_environment(environment_collection)
 
     def one_step(self):
         """
@@ -440,43 +478,10 @@ class SUMOEnvironment(gym.Env):
         """
         terminated = False
         try:
-            w = traci.simulationStep()
+            traci.simulationStep()
         except traci.exceptions.FatalTraCIError:
             self.stop()
             raise RuntimeError
-
-        # Collecting online vehicles
-        IDsOfVehicles = traci.vehicle.getIDList()
-        # Moving forward if ego can be inserted
-        if len(IDsOfVehicles) > self.min_departed_vehicles and self.egoID is None:
-            # Finding the last car on the highway
-            for carID in IDsOfVehicles:
-                if traci.vehicle.getPosition(carID)[0] < self.ego_start_position and \
-                        traci.vehicle.getSpeed(carID) > (60 / 3.6):  # and "0" in traci.vehicle.getLaneID(carID):
-                    # Saving ID and start position for ego vehicle
-                    self.egoID = carID
-                    self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
-            if self.egoID is None:
-                self.egoID = IDsOfVehicles[0]
-                self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
-            # Setting ego simulation variables to be controlled by us (not SUMO)
-            lanes = [-2, -1, 0, 1, 2]
-            traci.vehicle.setLaneChangeMode(self.egoID, 0x0)
-            traci.vehicle.setSpeedMode(self.egoID, 0x0)
-            traci.vehicle.setColor(self.egoID, (255, 0, 0))
-            traci.vehicle.setType(self.egoID, 'ego')
-            traci.vehicle.setMinGap(self.egoID, 0)
-            traci.vehicle.setMinGapLat(self.egoID, 0)
-
-            traci.vehicle.setSpeedFactor(self.egoID, 2)
-            traci.vehicle.setSpeed(self.egoID, self.desired_speed)
-            traci.vehicle.setMaxSpeed(self.egoID, 50)
-            traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, 0.0,
-                                           [tc.VAR_SPEED, tc.VAR_LANE_INDEX, tc.VAR_ANGLE, tc.VAR_POSITION,
-                                            tc.VAR_LENGTH, tc.VAR_WIDTH])
-            traci.vehicle.addSubscriptionFilterLanes(lanes, noOpposite=True, downstreamDist=100.0, upstreamDist=100.0)
-            # Since it is when we start the simulation it returns True for the reset function.
-            return True, None
 
         cause = None
         # Checking abnormal cases for ego (if events happened which terminate the simulation)
@@ -498,31 +503,104 @@ class SUMOEnvironment(gym.Env):
                 self.egoID = None
         return (not terminated), cause
 
+    def calculate_structured_environment(self, cars_around):
+        """
+        This fuction is deprecated, in the futute the implementation should be rethought based on the lateral control.
+        :return:
+        """
+        ego_state = cars_around[self.egoID]
+        environment_state = {}
+        basic_vals = {'dx': 200, 'dv': 0}
+        basic_keys = ['FL', 'FE', 'FR', 'RL', 'RE', 'RR', 'EL', 'ER']
+        for state_key in basic_keys:
+            if state_key in ['RL', 'RE', 'RR']:
+                environment_state[state_key] = copy.copy(basic_vals)
+                environment_state[state_key]['dv'] = 0
+                environment_state[state_key]['dx'] = -200
+            elif state_key in ['EL', 'ER']:
+                environment_state[state_key] = 0
+            else:
+                environment_state[state_key] = copy.copy(basic_vals)
+        lane = {0: [], 1: [], 2: []}
+        ego_data = cars_around[self.egoID]
+
+        for car_id in cars_around.keys():
+            if car_id is not self.egoID:
+                new_car = dict()
+                new_car['dx'] = cars_around[car_id]['x_position'] - cars_around[self.egoID]['x_position']
+                new_car['dy'] = abs(cars_around[car_id]["y_position"] - cars_around[self.egoID]['y_position'])
+                new_car['dv'] = cars_around[car_id]['velocity'] - cars_around[self.egoID]['velocity']
+                new_car['l'] = cars_around[car_id]["length"]
+                lane[cars_around[car_id][tc.VAR_LANE_INDEX]].append(new_car)
+        [lane[i].sort(key=lambda x: x['dx']) for i in lane.keys()]
+        for lane_id in lane.keys():
+            if lane_id == ego_data['lane_id']:
+                for veh in lane[lane_id]:
+                    if veh['dx'] - veh['l'] > 0:
+                        if veh['dx'] - veh['l'] < environment_state['FE']['dx']:
+                            environment_state['FE']['dx'] = veh['dx'] - veh['l']
+                            environment_state['FE']['dv'] = veh['dv']
+                    elif veh['dx'] + ego_data["length"] < 0:
+                        if veh['dx'] + ego_data["length"] > environment_state['RE']['dx']:
+                            environment_state['RE']['dx'] = veh['dx'] + ego_data["length"]
+                            environment_state['RE']['dv'] = veh['dv']
+            elif lane_id > ego_data['lane_id']:
+                for veh in lane[lane_id]:
+                    if veh['dx'] - veh['l'] > 0:
+                        if veh['dx'] - veh['l'] < environment_state['FL']['dx']:
+                            environment_state['FL']['dx'] = veh['dx'] - veh['l']
+                            environment_state['FL']['dv'] = veh['dv']
+                    elif veh['dx'] + ego_data["length"] < 0:
+                        if veh['dx'] + ego_data["length"] > environment_state['RL']['dx']:
+                            environment_state['RL']['dx'] = veh['dx'] + ego_data["length"]
+                            environment_state['RL']['dv'] = veh['dv']
+                    else:
+                        environment_state['EL'] = 1
+
+            elif lane_id < ego_data["lane_id"]:
+                for veh in lane[lane_id]:
+                    if veh['dx'] - veh['l'] > 0:
+                        if veh['dx'] - veh['l'] < environment_state['FR']['dx']:
+                            environment_state['FR']['dx'] = veh['dx'] - veh['l']
+                            environment_state['FR']['dv'] = veh['dv']
+                    elif veh['dx'] + ego_data["length"] < 0:
+                        if veh['dx'] + ego_data["length"] > environment_state['RR']['dx']:
+                            environment_state['RR']['dx'] = veh['dx'] + ego_data["length"]
+                            environment_state['RR']['dv'] = veh['dv']
+                    else:
+                        environment_state['ER'] = 1
+
+        environment_state['speed'] = ego_data[tc.VAR_SPEED]
+        environment_state['lane'] = ego_data[tc.VAR_LANE_INDEX]  # todo: onehot vector
+        # todo: here comes the lateral model , the lane and speed are calculated based on that also
+        #  the others like dx dy should be...
+        environment_state['des_speed'] = self.desired_speed
+        return environment_state, ego_state
+
 
 class LateralModel():
-     """
+    """
      Class for keeping track of the agent movement in case of continuous SUMO state space.
      """
-     def __init__(self, position, speed, orientation, lane_id):
-         """
+
+    def __init__(self, position, speed, orientation, lane_id):
+        """
          Function to initiate the lateral Model, it will set the parameters.
          :param position: Initial position at step 0
          :param speed: initial speed of the car in the direction of the orientation
          :param orientation: initial orientation
          :param lane_id: initial lane_id
          """
-         self.position = position
-         #todo: must be calculated based on the orientation.
-         self.speed_x = None
-         self.speed_y = None
-         self.orientation = None
-         self.lane_id = None
-         self.steering_angle = 0
+        self.position = position
+        # todo: must be calculated based on the orientation.
+        self.speed_x = None
+        self.speed_y = None
+        self.orientation = None
+        self.lane_id = None
+        self.steering_angle = 0
 
-
-
-     def reset(self, position, speed, orientation, lane_id):
-         """
+    def reset(self, position, speed, orientation, lane_id):
+        """
          Function to reset the model to initial state. #it could be deleted and a new model created at every reset
          todo: consider
          :param position: vector [x,y]
@@ -532,15 +610,14 @@ class LateralModel():
          :return:
          """
 
-
-     def step(self, action, lane_direction_angle):
-         """
+    def step(self, action, lane_direction_angle):
+        """
          Function responsible for the action transform into the continuous state space.
          :return: new_state: containing the input vehicle's new position, orientation, speed, lane.
          """
-         pass
+        pass
 
-     def calculate_speed(self, speed, orientation):
+    def calculate_speed(self, speed, orientation):
         """
         Function to be used for speed calculation based on orientation and previous things...
         :param speed:
@@ -548,11 +625,8 @@ class LateralModel():
         :return:
         """
 
-     def convert_self_state_to_SUMO_state(self):
-         """
+    def convert_self_state_to_SUMO_state(self):
+        """
          Function to calculate own state into SUMO state, because we need to give SUMO its own model based state
          :return:
          """
-
-
-
