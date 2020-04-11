@@ -21,12 +21,12 @@ class SUMOEnvironment(gym.Env):
     """
 
     def __init__(self, simulation_directory='D:\\msc\\forth\\traffic\\continuousSUMOv1\\sim_conf', type_os="image",
-                 type_as="continuous"):
+                 type_as="discrete", reward_type='speed', mode='human', change_speed_interval=100):
 
         # Basic gym environment variables
-        self.setup_observation_space(type_os=type_os)
         self.type_as = type_as
         self.type_os = type_os
+        self.setup_observation_space()
         self.setup_action_space()
         self.setup_reward_system(reward_type=reward_type)
         self._max_episode_steps = 2500
@@ -36,7 +36,7 @@ class SUMOEnvironment(gym.Env):
         self.sumoBinary = None
         self.sumoCmd = None
         self.simulation_list = self.get_possible_simulations(simulation_directory)
-        self.min_departed_vehicles = 5
+        self.min_departed_vehicles = 3
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
 
@@ -95,12 +95,14 @@ class SUMOEnvironment(gym.Env):
                                 'slow': [True, 0],
                                 'left_highway': [True, 0],
                                 'immediate': [False, 1],
+                                'success': [True, 0],
                                 'type': reward_type}
         elif reward_type == 'speed':
             self.reward_dict = {'collision': [True, 0],
                                 'slow': [True, 0],
                                 'left_highway': [True, 0],
-                                'immediate': [True, 1],
+                                'immediate': [False, 1],
+                                'success': [True, 1],
                                 'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
@@ -142,6 +144,8 @@ class SUMOEnvironment(gym.Env):
         self.lane_change_counter = 0
         self.time_to_change_des_speed = np.random.randint(100, 250)
         self.ego_start_position = 10000  # used for result display
+        self.lanechange_counter = 0
+        self.lateral_model = None
 
     def stop(self):
         """
@@ -183,6 +187,8 @@ class SUMOEnvironment(gym.Env):
         self.select_egos()
         # Getting initial environment state
         self.refresh_environment()
+        # Init lateral model
+        self.lateral_model = self.state  # todo: LateralModel()
         # Setting a starting speed of the ego
         self.state['velocity'] = self.desired_speed
         return self.environment_state
@@ -200,80 +206,95 @@ class SUMOEnvironment(gym.Env):
         :param action:
         :return:
         """
-        new_x, last_x = 0, 0  # for reward calculation
         # Collecting the ids of online vehicles
         IDsOfVehicles = traci.vehicle.getIDList()
 
-        reward = 1
         # Checking if ego is still alive
         if self.egoID in IDsOfVehicles:
             # Selecting action to do
             ctrl = self.calculate_action(action)
-            # Setting vehicle speed according to selected action
-            new_speed = min(max(self.state['velocity'] + ctrl[1], 0), 50)  # todo hardcoded max speed
-            traci.vehicle.setSpeed(self.egoID, new_speed)
+            # Checking if current lane is the same with previous
+            # todo: Bence átállítja a stateben a lanet ha vált
+            # also itt hívjuk ezeket az akiókat is át kell adni a laterálnak
+            self.lateral_state = copy.deepcopy(
+                self.state)  # self.lateral_model.step(ctrl)  # gives None for lane if it left the highway
+            last_lane = traci.vehicle.getLaneID(self.egoID)[:-1]
+            last_lane_idx = traci.vehicle.getLaneID(self.egoID)[-1]
 
-            self.wants_to_change.append(ctrl[0])  # Collecting change attempts
-            # Checking if change attempts are enough to change lane
-            if sum(self.wants_to_change) > self.change_after or sum(self.wants_to_change) < -self.change_after:
-                self.lanechange_counter += 1  # Storing successful lane change
-                last_lane = traci.vehicle.getLaneID(self.egoID)[:-1]
-                lane_new = int(traci.vehicle.getLaneID(self.egoID)[-1]) + ctrl[0]
+            # Setting vehicle speed according to selected action
+            traci.vehicle.setSpeed(self.egoID, self.lateral_state['velocity'] + ctrl[1])
+            new_lane = int(int(last_lane_idx) + ctrl[0])
+            self.lateral_state['lane_id'] = new_lane if new_lane in [0, 1,
+                                                                     2] else None  # todo for testing. until Lateral is ready
+            if self.lateral_state['lane_id'] != self.state['lane_id']:
                 # Checking if new lane is still on the road
-                if lane_new not in [0, 1, 2]:
-                    reward = self.max_punishment
-                    new_x = \
-                        traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
-                    return self.environment_state, reward, True, {'cause': 'Left Highway',
+                if self.lateral_state['lane_id'] is None:
+                    reward = self.reward_dict['left_highway'][1]
+                    new_x = traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
+                    self.egoID = None
+                    return self.environment_state, reward, True, {'cause': 'left_highway',
                                                                   'rewards': reward,
                                                                   'velocity': self.state['velocity'],
                                                                   'distance': new_x - self.ego_start_position,
                                                                   'lane_change': self.lanechange_counter}
+
                 else:
-                    self.wants_to_change = []
-                    lane_new = last_lane + str(lane_new)
-                    x = traci.vehicle.getLanePosition(self.egoID)
-                    done = False
-                    while not done:
-                        try:
-                            traci.vehicle.moveTo(self.egoID, lane_new, x)
-                        except traci.exceptions.TraCIException:
-                            x += 0.1
-                        else:
-                            done = True
-            # Removing elements of lane change attempts to have always the same lenght
-            if len(self.wants_to_change) > self.change_after:
-                self.wants_to_change.pop(0)
+                    self.lanechange_counter += 1  # Storing successful lane change
+                    lane_new = last_lane + str(self.lateral_state['lane_id'])
+                    x = traci.vehicle.getLanePosition(self.egoID)  # todo: use self.lateral_state['x_position']
+                    # todo: try out this placing method
+                    # lane = traci.vehicle.getLaneID(self.egoID)
+                    # edgeID = traci.lane.getEdgeID(lane)
+                    # traci.vehicle.moveToXY(self.egoID, edgeID, lane, self.lateral_state['x_position'],
+                    #                       self.lateral_state['y_position'], angle=tc.INVALID_DOUBLE_VALUE, keepRoute=1)                    # placing ego to the new lane
+                    traci.vehicle.moveTo(self.egoID, lane_new, x)
+                    # sync new state with lateral state
+                    self.state['lane_id'] = copy.deepcopy(self.lateral_state['lane_id'])
 
-            if self.egoID is not None:
-                last_x = traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
-                is_ok, cause = self.one_step()
-                if is_ok:
-                    self.refresh_environment()
-                    new_x = traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
-                else:
-                    new_x = last_x + max(self.state['velocity'] + ctrl[1], 0) * self.dt
+            # TODO: ezt meg kéne máshogy oldani ne legyen runtime error
+            terminated = False
+            try:
+                traci.simulationStep()
+            except traci.exceptions.FatalTraCIError:
+                self.stop()
+                raise RuntimeError
+
+            # Checking abnormal cases for ego (if events happened which terminate the simulation)
+            if self.egoID in traci.simulation.getCollidingVehiclesIDList():
+                cause = "collision" if self.reward_dict['collision'][0] else None
+                reward = self.reward_dict[cause][1]
+                terminated = True
+                self.egoID = None
+
+            elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (50 / 3.6):
+                cause = 'slow' if self.reward_dict['slow'][0] else None
+                reward = self.reward_dict[cause][1]
+                terminated = True
+                self.egoID = None
+
+            elif self.egoID in traci.simulation.getArrivedIDList():
+                # Case for completing the highway without a problem
+                cause = None
+                reward = self.reward_dict['success'][1]
+                self.egoID = None
+                terminated = True
+            else:
+                # Case for successful step
+                cause = None
+                reward = self.calculate_immediate_reward()
+                terminated = False
+                self.steps_done += 1
+                self.refresh_environment()
+
+            new_x = self.lateral_state['x_position']
+
+            return self.environment_state, reward, terminated, {'cause': cause, 'rewards': reward,
+                                                                'velocity': self.state['velocity'],
+                                                                'distance': new_x - self.ego_start_position,
+                                                                'lane_change': self.lanechange_counter}
         else:
-            is_ok = False
-            cause = None
-
-        terminated = not is_ok
-        if terminated and cause is not None:
-            # case for some bad event with termination
-            reward = self.max_punishment
-        elif not terminated:
-            # Case for successful step
-            if self.reward_type == 'simple':
-                reward = reward - (abs(self.state['velocity'] - self.desired_speed)) / self.desired_speed
-            self.steps_done += 1
-        else:
-            # Case for completing the highway without a problem
-            reward = -1 * self.max_punishment
-
-        return self.environment_state, reward, terminated, {'cause': cause, 'rewards': reward,
-                                                            'velocity': self.state['velocity'],
-                                                            'distance': new_x - self.ego_start_position,
-                                                            'lane_change': self.lanechange_counter}
+            raise RuntimeError('After terminated episode, reset is needed. '
+                               'Please run env.reset() before starting a new episode.')
 
     def select_egos(self, number_of_egos=1):
         """
@@ -320,6 +341,10 @@ class SUMOEnvironment(gym.Env):
                     traci.gui.trackVehicle('View #0', self.egoID)
 
     def choose_random_simulation(self):
+        """
+        This chooses a new simulation randomly, so it will load a different one every time.
+        :return: None
+        """
         self.sumoCmd[2] = np.random.choice(self.simulation_list)
 
     def get_possible_simulations(self, simulation_directory):
@@ -468,40 +493,7 @@ class SUMOEnvironment(gym.Env):
         environment_collection = self.get_simulation_environment()
         # todo: here will be the lateral calculation for state i guess
         self.environment_state, self.state = self.get_environment(environment_collection)
-
-    def one_step(self):
-        """
-        This function is used to step the SUMO.
-        Returns
-        -------
-
-        """
-        terminated = False
-        try:
-            traci.simulationStep()
-        except traci.exceptions.FatalTraCIError:
-            self.stop()
-            raise RuntimeError
-
-        cause = None
-        # Checking abnormal cases for ego (if events happened which terminate the simulation)
-        if self.egoID is not None:
-            if self.egoID in traci.simulation.getCollidingVehiclesIDList():
-                cause = "Collision"
-            elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (50 / 3.6):
-                cause = 'Too Slow'
-            elif self.egoID in traci.simulation.getArrivedIDList():
-                # Case for finished route
-                cause = None
-                self.egoID = None
-                terminated = True
-            else:
-                # Case for running simulation (no events yet)
-                cause = None
-            if cause is not None:
-                terminated = True
-                self.egoID = None
-        return (not terminated), cause
+        self.lateral_state = copy.deepcopy(self.state)  ## todo: until the lateral is not working I use this
 
     def calculate_structured_environment(self, cars_around):
         """
@@ -571,7 +563,7 @@ class SUMOEnvironment(gym.Env):
                         environment_state['ER'] = 1
 
         environment_state['speed'] = ego_data[tc.VAR_SPEED]
-        environment_state['lane'] = ego_data[tc.VAR_LANE_INDEX]  # todo: onehot vector
+        environment_state['lane_id'] = ego_data[tc.VAR_LANE_INDEX]  # todo: onehot vector
         # todo: here comes the lateral model , the lane and speed are calculated based on that also
         #  the others like dx dy should be...
         environment_state['des_speed'] = self.desired_speed
@@ -583,15 +575,20 @@ class LateralModel():
      Class for keeping track of the agent movement in case of continuous SUMO state space.
      """
 
-    def __init__(self, position, speed, orientation, lane_id):
+    def __init__(self, initial_state):
         """
          Function to initiate the lateral Model, it will set the parameters.
-         :param position: Initial position at step 0
-         :param speed: initial speed of the car in the direction of the orientation
-         :param orientation: initial orientation
-         :param lane_id: initial lane_id
+         :param initial_state: containing:
+                        {'x_position': initial position in x direction
+                         'y_position': initial position in y direction
+                         'length': length of the car
+                         'width': width of the car
+                         'velocity': initial velocity of the car
+                         'lane_id': initial lane of the car
+                         'heading': initial heading of the car
          """
-        self.position = position
+        self.position_x = initial_state['x_position']
+        self.position_y = initial_state['y_position']
         # todo: must be calculated based on the orientation.
         self.speed_x = None
         self.speed_y = None
@@ -599,22 +596,31 @@ class LateralModel():
         self.lane_id = None
         self.steering_angle = 0
 
-    def reset(self, position, speed, orientation, lane_id):
+    def reset(self, initial_state):
         """
          Function to reset the model to initial state. #it could be deleted and a new model created at every reset
-         todo: consider
-         :param position: vector [x,y]
-         :param speed: double in the direction of the orientation.
-         :param orientation: orientation of the car, and at initially the road.
-         :param lane_id: id of the occupied lane.
+                        {'x_position': initial position in x direction
+                         'y_position': initial position in y direction
+                         'length': length of the car
+                         'width': width of the car
+                         'velocity': initial velocity of the car
+                         'lane_id': initial lane of the car
+                         'heading': initial heading of the car
          :return:
          """
 
-    def step(self, action, lane_direction_angle):
+    def step(self, action):
         """
          Function responsible for the action transform into the continuous state space.
-         :return: new_state: containing the input vehicle's new position, orientation, speed, lane.
+         :return: new_state: containing the input vehicle's lateral_state = {'x_position': ,
+                         'y_position': ,
+                         'length': ,
+                         'width': ,
+                         'velocity': ,
+                         'lane_id': ,
+                         'heading': }
          """
+        # sztem a tracival kell tudni kommunikálni
         pass
 
     def calculate_speed(self, speed, orientation):
