@@ -14,6 +14,8 @@ import traci
 import traci.constants as tc
 from gym import spaces
 
+from model import LateralModel
+
 
 class SUMOEnvironment(gym.Env):
     """
@@ -41,6 +43,10 @@ class SUMOEnvironment(gym.Env):
         self.min_departed_vehicles = 3
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
+
+        # Bool to test lateral
+        # TODO:  remove if lateral model is ready
+        self.test_lateral = False
 
         self.start()
         self.reset()
@@ -190,7 +196,17 @@ class SUMOEnvironment(gym.Env):
         # Getting initial environment state
         self.refresh_environment()
         # Init lateral model
-        self.lateral_model = self.state  # todo: LateralModel()
+        # TODO: Remove else when lateral model is ready
+        if self.test_lateral:
+            self.lateral_model = LateralModel(
+                position=None,
+                speed=None,
+                orientation=None,
+                lane_id=self.lane_ID,
+                lane_width=self.lane_width
+            )
+        else:
+            self.lateral_model = self.state
         # Setting a starting speed of the ego
         self.state['velocity'] = self.desired_speed
         return self.environment_state
@@ -205,7 +221,7 @@ class SUMOEnvironment(gym.Env):
     def step(self, action):
         """
 
-        :param action:
+        :param action: int
         :return:
         """
         # Collecting the ids of online vehicles
@@ -218,16 +234,26 @@ class SUMOEnvironment(gym.Env):
             # Checking if current lane is the same with previous
             # todo: Bence átállítja a stateben a lanet ha vált
             # also itt hívjuk ezeket az akiókat is át kell adni a laterálnak
+            if self.test_lateral:
+                self.lateral_state = copy.deepcopy(self.lateral_model.state)
             self.lateral_state = copy.deepcopy(
                 self.state)  # self.lateral_model.step(ctrl)  # gives None for lane if it left the highway
-            last_lane = traci.vehicle.getLaneID(self.egoID)[:-1]
+            self.lane_ID = traci.vehicle.getLaneID(self.egoID)
+            self.lane_width = traci.lane.getWidth(self.lane_ID)
+            last_lane = self.lane_ID[:-1]
             last_lane_idx = traci.vehicle.getLaneID(self.egoID)[-1]
 
             # Setting vehicle speed according to selected action
             traci.vehicle.setSpeed(self.egoID, self.lateral_state['velocity'] + ctrl[1])
             new_lane = int(int(last_lane_idx) + ctrl[0])
-            self.lateral_state['lane_id'] = new_lane if new_lane in [0, 1,
-                                                                     2] else None  # todo for testing. until Lateral is ready
+            # TODO: Remove else when lateral model is ready
+            # TODO: consider replacing condition with a more parametrized form for other road structures
+            if self.test_lateral:
+                self.lateral_state['lane_id'] = self.lateral_model.lane_id if self.lateral_model.lane_id in [0, 1, 2] \
+                    else None
+            else:
+                self.lateral_state['lane_id'] = new_lane if new_lane in [0, 1,
+                                                                     2] else None
             if self.lateral_state['lane_id'] != self.state['lane_id']:
                 # Checking if new lane is still on the road
                 if self.lateral_state['lane_id'] is None:
@@ -248,7 +274,8 @@ class SUMOEnvironment(gym.Env):
                     # lane = traci.vehicle.getLaneID(self.egoID)
                     # edgeID = traci.lane.getEdgeID(lane)
                     # traci.vehicle.moveToXY(self.egoID, edgeID, lane, self.lateral_state['x_position'],
-                    #                       self.lateral_state['y_position'], angle=tc.INVALID_DOUBLE_VALUE, keepRoute=1)                    # placing ego to the new lane
+                    # self.lateral_state['y_position'], angle=tc.INVALID_DOUBLE_VALUE, keepRoute=1)
+                    # Perform lane change
                     traci.vehicle.moveTo(self.egoID, lane_new, x)
                     # sync new state with lateral state
                     self.state['lane_id'] = copy.deepcopy(self.lateral_state['lane_id'])
@@ -413,11 +440,10 @@ class SUMOEnvironment(gym.Env):
 
     def calculate_image_environment(self, environment_collection):
         """
-
-        Returns: environment state in the shape of [1, range_x, range_y, 3]
+        :param environment_collection:
+        :return environment_state: [1, range_x, range_y, 3]
         where the last dimension is the channels of speed, lane_id, and desired speed
-        and ego state as a dict: {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
-        -------
+        :return ego_state: dict of {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
         """
         ego_state = environment_collection[self.egoID]
         # Creating state representation as a matrix (image)
