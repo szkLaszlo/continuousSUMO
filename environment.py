@@ -50,14 +50,12 @@ class SUMOEnvironment(gym.Env):
         # setting basic environment variables
         self.dt = None
         self.lane_width = None
-        self.lane_offset = None # Defines the 0 first lane offset from 0.
+        self.lane_offset = None  # Defines the 0 first lane offset from 0.
         self.steps_done = 0
         self.egoID = None
         self.state = None
         self.desired_speed = None
         self.lane_change_counter = 0
-
-
 
     def setup_observation_space(self, type_os="image"):
         """
@@ -125,7 +123,7 @@ class SUMOEnvironment(gym.Env):
         This function starts the SUMO connection and loads an initial simulation.
         :return:
         """
-        #todo: start this with base_sim_dir
+        # todo: start this with base_sim_dir
         if "Windows" in platform.system():
             # Case for windows execution
             if self.rendering:
@@ -308,9 +306,8 @@ class SUMOEnvironment(gym.Env):
         print()
         return ['id']
 
-
     def choose_random_simulation(self, sim_dir):
-        #todo: Automate this
+        # todo: Automate this
         self.rand_index = np.random.choice(np.arange(0, 6), p=[0.20, 0.15, 0.20, 0.20, 0.20, 0.05])
         # self.rand_index = 0
         # print(f"Simulation {self.rand_index} loaded.")
@@ -323,7 +320,7 @@ class SUMOEnvironment(gym.Env):
         """
         Function to set random speed of ego(s)
         """
-        #TODO: make this work for more ego
+        # TODO: make this work for more ego
         self.desired_speed = random.randint(130, 160) / 3.6
 
     def calculate_action(self, action):
@@ -500,29 +497,28 @@ class SUMOEnvironment(gym.Env):
 
 
 class LateralModel():
-     """
+    """
      Class for keeping track of the agent movement in case of continuous SUMO state space.
      """
-     def __init__(self, position, speed, orientation, lane_id):
-         """
+
+    def __init__(self, position, speed, orientation, lane_id):
+        """
          Function to initiate the lateral Model, it will set the parameters.
          :param position: Initial position at step 0
          :param speed: initial speed of the car in the direction of the orientation
          :param orientation: initial orientation
          :param lane_id: initial lane_id
          """
-         self.position = position
-         #todo: must be calculated based on the orientation.
-         self.speed_x = None
-         self.speed_y = None
-         self.orientation = None
-         self.lane_id = None
-         self.steering_angle = 0
+        self.position = position
+        # todo: must be calculated based on the orientation.
+        self.speed_x = None
+        self.speed_y = None
+        self.orientation = None
+        self.lane_id = None
+        self.steering_angle = 0
 
-
-
-     def reset(self, position, speed, orientation, lane_id):
-         """
+    def reset(self, position, speed, orientation, lane_id):
+        """
          Function to reset the model to initial state. #it could be deleted and a new model created at every reset
          todo: consider
          :param position: vector [x,y]
@@ -532,15 +528,14 @@ class LateralModel():
          :return:
          """
 
-
-     def step(self, action, lane_direction_angle):
-         """
+    def step(self, action, lane_direction_angle):
+        """
          Function responsible for the action transform into the continuous state space.
          :return: new_state: containing the input vehicle's new position, orientation, speed, lane.
          """
-         pass
+        pass
 
-     def calculate_speed(self, speed, orientation):
+    def calculate_speed(self, speed, orientation):
         """
         Function to be used for speed calculation based on orientation and previous things...
         :param speed:
@@ -548,11 +543,8 @@ class LateralModel():
         :return:
         """
 
-     def convert_self_state_to_SUMO_state(self):
-         """
+    def convert_self_state_to_SUMO_state(self):
+        """
          Function to calculate own state into SUMO state, because we need to give SUMO its own model based state
          :return:
          """
-
-
-
