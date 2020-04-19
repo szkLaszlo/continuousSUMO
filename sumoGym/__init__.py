@@ -1,7 +1,8 @@
 """
-Please put this file to the directory of the gym project. It will add the sumo path to the environments, thus enabling
+Usage:
+1. put this file to the directory of the gym project. It will add the sumo path to the environments, thus enabling
 the usage of the project as gym environment.
-# please also update the project entry point below #
+2. update the project entry point below
 """
 import os
 import sys

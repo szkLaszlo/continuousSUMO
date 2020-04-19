@@ -24,7 +24,9 @@ class SUMOEnvironment(gym.Env):
                  type_as="discrete", reward_type='speed', mode='human', change_speed_interval=100):
 
         # Basic gym environment variables
+        # Type action space
         self.type_as = type_as
+        # Type observation
         self.type_os = type_os
         self.setup_observation_space()
         self.setup_action_space()
