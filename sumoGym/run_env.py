@@ -2,7 +2,8 @@
 This script contains a basic usage of the environment.
 """
 import gym
-import sumoGym.environment  # This import must not be removed
+# This import must not be removed: import sumoGym.environment
+import sumoGym.environment
 
 if __name__ == "__main__":
     # Modify simulation_directory for your directory path
