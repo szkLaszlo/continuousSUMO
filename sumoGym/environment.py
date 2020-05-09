@@ -47,12 +47,9 @@ class SUMOEnvironment(gym.Env):
         self.sumoCmd = None
         self.simulation_list = self.get_possible_simulations(simulation_directory)
         self.min_departed_vehicles = 3
+
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
-
-        # Bool to test lateral
-        # TODO:  remove if lateral model is ready
-        self.test_lateral = False
 
         self.start()
         self.reset()
@@ -203,7 +200,7 @@ class SUMOEnvironment(gym.Env):
         self.refresh_environment()
         # Init lateral model
         # TODO: Remove else when lateral model is ready
-        if self.test_lateral:
+        if self.type_as == 'continuous':
             self.lateral_model = LateralModel(
                 position=None,
                 speed=None,
@@ -237,13 +234,19 @@ class SUMOEnvironment(gym.Env):
         if self.egoID in IDsOfVehicles:
             # Selecting action to do
             ctrl = self.calculate_action(action)
+
             # Checking if current lane is the same with previous
-            # todo: Bence átállítja a stateben a lanet ha vált
             # also itt hívjuk ezeket az akiókat is át kell adni a laterálnak
-            if self.test_lateral:
-                self.lateral_state = copy.deepcopy(self.lateral_model.state)
-            self.lateral_state = copy.deepcopy(
-                self.state)  # self.lateral_model.step(ctrl)  # gives None for lane if it left the highway
+            if self.type_as == 'continuous':
+                # TODO: pass steering_angle and velocity to lateral model
+                steering_angle = random.uniform(-0.5, 0.5)
+                self.lateral_state = self.lateral_model.step(dt=self.dt,
+                                                             steering_angle=steering_angle,
+                                                             velocity=self.state['velocity'],
+                                                             )
+            else:
+                # self.lateral_model.step(ctrl)  # gives None for lane if it left the highway
+                self.lateral_state = copy.deepcopy(self.state)
             self.lane_ID = traci.vehicle.getLaneID(self.egoID)
             self.lane_width = traci.lane.getWidth(self.lane_ID)
             last_lane = self.lane_ID[:-1]
@@ -254,12 +257,16 @@ class SUMOEnvironment(gym.Env):
             new_lane = int(int(last_lane_idx) + ctrl[0])
             # TODO: Remove else when lateral model is ready
             # TODO: consider replacing condition with a more parametrized form for other road structures
-            if self.test_lateral:
-                self.lateral_state['lane_id'] = self.lateral_model.lane_id if self.lateral_model.lane_id in [0, 1, 2] \
-                    else None
+            if self.type_as == 'continuous':
+                if self.lateral_model.lateral_state['lane_id'] in [0, 1, 2]:
+                    self.lateral_state['lane_id'] = self.lateral_model.lateral_state['lane_id']
+                else:
+                    self.lateral_state['lane_id'] = None
+                # TODO: if none reset as vehicle potentially left the road?
             else:
-                self.lateral_state['lane_id'] = new_lane if new_lane in [0, 1,
-                                                                     2] else None
+                self.lateral_state['lane_id'] = new_lane if new_lane in [0, 1, 2] else None
+
+            # Potentially update lane
             if self.lateral_state['lane_id'] != self.state['lane_id']:
                 # Checking if new lane is still on the road
                 if self.lateral_state['lane_id'] is None:
