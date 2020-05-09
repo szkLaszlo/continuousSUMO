@@ -6,6 +6,7 @@ import gym
 import sumoGym.environment
 
 if __name__ == "__main__":
+def main():
     # Modify simulation_directory for your directory path
     env = gym.make('SUMOEnvironment-v0', simulation_directory='..\\sim_conf')
     while True:
@@ -15,3 +16,7 @@ if __name__ == "__main__":
             state, reward, terminate, info = env.step(action)
             print(info)
         env.reset()
+
+
+if __name__ == "__main__":
+    main()
