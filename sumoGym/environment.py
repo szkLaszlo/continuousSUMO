@@ -243,10 +243,10 @@ class SUMOEnvironment(gym.Env):
             # also itt hívjuk ezeket az akiókat is át kell adni a laterálnak
             if self.type_as == 'continuous':
                 # TODO: pass steering_angle and velocity to lateral model
-                steering_angle = random.uniform(-0.5, 0.5)
+                steering_angle, velocity_dif = ctrl
                 self.lateral_state = self.lateral_model.step(dt=self.dt,
                                                              steering_angle=steering_angle,
-                                                             velocity=self.state['velocity'],
+                                                             velocity_dif=velocity_dif,
                                                              )
             else:
                 # self.lateral_model.step(ctrl)  # gives None for lane if it left the highway
@@ -430,7 +430,8 @@ class SUMOEnvironment(gym.Env):
         acc = self.accel_constant[action % len(self.accel_constant)]
         return [steer, acc]
 
-    def calculate_continuous_action(self, action):
+    @staticmethod
+    def calculate_continuous_action(action):
         """
         Calculate continuous action with or without batch
         :param action: actions to select [batch x [steering, acceleration]] or [[steering, acceleration]]

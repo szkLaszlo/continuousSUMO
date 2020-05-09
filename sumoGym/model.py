@@ -84,13 +84,14 @@ class LateralModel:
             'lane_id': [self.lateral_state['lane_id']]
         }
 
-    def step(self, dt,  steering_angle, velocity):
+    def step(self, dt, steering_angle, velocity_dif):
         """
          Function responsible for the action transform into the continuous state space.
+         :param velocity_dif: float, difference to previous velocity [m/s]
          :return: new_state: containing the input vehicle's new position, orientation, speed, lane.
          """
         self.lateral_state['steering_angle'] = steering_angle
-        self.lateral_state['velocity'] = velocity
+        self.lateral_state['velocity'] += velocity_dif
 
         # Simulate the system + estimator
         # Resolution of the trajectory
