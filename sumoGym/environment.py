@@ -202,21 +202,25 @@ class SUMOEnvironment(gym.Env):
         # TODO: Remove else when lateral model is ready
         if self.type_as == 'continuous':
             self.lateral_model = LateralModel(
-                position=None,
-                speed=None,
-                orientation=None,
-                lane_id=self.lane_ID,
+                x_position=self.state['x_position'],
+                y_position=self.state['y_position'],
+                # TODO: can be refactored to this if self.state['velocity'] is initiated with self.desired_speed earlier
+                # velocity=self.state['velocity'],
+                velocity=self.desired_speed,
+                heading=self.state['heading'],
+                lane_id=self.state['lane_id'],
                 lane_width=self.lane_width
             )
         else:
             self.lateral_model = self.state
+
         # Setting a starting speed of the ego
         self.state['velocity'] = self.desired_speed
         return self.environment_state
 
     def render(self, mode='human'):
         """
-        Basic function of the OpenAI gym, this does not need here anything
+        Basic function of the OpenAI gym, this does not require anything
         :param mode:
         """
         pass
