@@ -80,7 +80,7 @@ class SUMOEnvironment(gym.Env):
         """
         if self.type_as == "continuous":
             # todo: hardcoded range of actions, first is steer 2. is acceleration command
-            # todo: radian or degree???
+            # todo: radian or degree??? note: rad!
             low = np.array([-1, -1])
             high = np.array([1, 1])
             self.action_space = spaces.Box(low, high, dtype=np.float)
