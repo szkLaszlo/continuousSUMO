@@ -11,7 +11,7 @@ def main():
     env = gym.make('SUMOEnvironment-v0',
                    simulation_directory='..\\sim_conf',
                    type_os="image",
-                   type_as=type_as,
+                   type_as='continuous',
                    reward_type='speed',
                    mode='human',
                    change_speed_interval=100,
