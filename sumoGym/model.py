@@ -25,12 +25,12 @@ class LateralModel:
     def __init__(self, x_position, y_position, velocity, heading, lane_id, lane_width):
         """
          Function to initiate the lateral Model, it will set the parameters.
-         :param x_position: initial x position of vehicle
-         :param y_position: initial y  position of vehicle
-         :param velocity: double, initial speed of the car in the direction of the heading
-         :param heading: deg, initial heading of the vehicle
+         :param x_position: initial x position of vehicle [m]
+         :param y_position: initial y  position of vehicle [m]
+         :param velocity: double, initial speed of the car in the direction of the heading [m/s]
+         :param heading: deg, initial heading of the vehicle from x axis [rad] NOTE: np.pi/2 is parallel to the y axis
          :param lane_id: int, initial lane_id
-         :param lane_width: float, width of initial lane in meters
+         :param lane_width: float, width of initial lane in meters [m]
          """
         # Initial lane position should be lane center
         self.lane_width = lane_width
@@ -87,6 +87,8 @@ class LateralModel:
     def step(self, dt, steering_angle, velocity_dif):
         """
          Function responsible for the action transform into the continuous state space.
+         :param dt: float, time step [sec]
+         :param steering_angle: float, [rad]
          :param velocity_dif: float, difference to previous velocity [m/s]
          :return: new_state: containing the input vehicle's new position, orientation, speed, lane.
          """
@@ -133,8 +135,9 @@ class LateralModel:
     @staticmethod
     def vehicle_update(t, x, u, params):
         """
+        Update vehicle location
 
-        :param t: float, current time
+        :param t: float, current time step, necessary for control library
         :param x: 1-D array with shape (nstates,)
         :param u: 1-D array with shape (ninputs,)
         :param params:
@@ -203,6 +206,15 @@ class LateralModel:
 
     @staticmethod
     def trajgen_output(self, t, x, u, params):
+        """
+
+        :param self:
+        :param t:
+        :param x:
+        :param u:
+        :param params:
+        :return:
+        """
         vref, yref = u
         return np.array([vref * t, yref, 0, vref, 0])
 
@@ -211,6 +223,8 @@ class LateralModel:
         Update in lane position based on new position and lane curvature
         NOTE: now only works on a road with straight segments
         :param dif_x: float, movement perpendicular to road segment tangent
+        :param dif_y:
+        :param road_curve:
         """
         # TODO: implement road curvature based update
         self.in_lane_pos += dif_x
@@ -253,7 +267,7 @@ def main():
 
         state = model.step(dt=0.1,
                            steering_angle=steering_angle,
-                           acceleration=0,
+                           velocity_dif=15,
                            )
 
         if counter == 1000:
