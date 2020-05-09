@@ -84,16 +84,6 @@ class LateralModel:
             'lane_id': [self.lateral_state['lane_id']]
         }
 
-    def reset(self, position, speed, orientation, lane_id):
-        """
-         Function to reset the model to initial state. #it could be deleted and a new model created at every reset
-         :param position: [x, y] vector position
-         :param speed: double, in the direction of the orientation.
-         :param orientation: orientation of the car, and initially at the road.
-         :param lane_id: id of the occupied lane.
-         :return:
-         """
-
     def step(self, dt,  steering_angle, velocity):
         """
          Function responsible for the action transform into the continuous state space.
