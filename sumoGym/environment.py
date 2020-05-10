@@ -13,6 +13,7 @@ import numpy as np
 import traci
 import traci.constants as tc
 from gym import spaces
+from traci import TraCIException
 
 from sumoGym.model import LateralModel
 
@@ -234,34 +235,37 @@ class SUMOEnvironment(gym.Env):
             self.lane_width = traci.lane.getWidth(self.lane_ID)
             last_lane = self.lane_ID[:-1]
 
+
             # Setting vehicle speed according to selected action
             traci.vehicle.setSpeed(self.egoID, self.lateral_state['velocity'])
 
             # Potentially update lane
-            if self.lateral_state['lane_id'] != self.state['lane_id']:
+            # if self.lateral_state['lane_id'] != self.state['lane_id']:
+            if True:
                 # Checking if new lane is still on the road
-                if self.lateral_state['lane_id'] is None:
-                    reward = self.reward_dict['left_highway'][1]
-                    new_x = traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
-                    self.egoID = None
-                    return self.environment_state * 0., reward, True, {'cause': 'left_highway',
-                                                                       'rewards': reward,
-                                                                       'velocity': self.state['velocity'],
-                                                                       'distance': new_x - self.ego_start_position,
-                                                                       'lane_change': self.lanechange_counter}
-
-                else:
+                try:
                     self.lanechange_counter += 1  # Storing successful lane change
                     lane_new = last_lane + str(self.lateral_state['lane_id'])
                     edgeID = traci.lane.getEdgeID(lane_new)
-                    traci.vehicle.moveToXY(self.egoID, edgeID, lane_new,
+                    traci.vehicle.moveToXY(self.egoID, edgeID, self.lateral_state['lane_id'],
                                            self.lateral_state['x_position'],
                                            self.lateral_state['y_position'],
                                            angle=tc.INVALID_DOUBLE_VALUE, keepRoute=1)
                     # Perform lane change
                     # traci.vehicle.moveTo(self.egoID, lane_new, x) #todo: it may be needed if the above does not work
                     # sync new state with lateral state
-                    self.state['lane_id'] = copy.deepcopy(self.lateral_state['lane_id'])
+
+                except TraCIException as exc:
+                    if lane_new in exc.args[0]:
+                        reward = self.reward_dict['left_highway'][1]
+                        new_x = \
+                        traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
+                        self.egoID = None
+                        return self.environment_state * 0., reward, True, {'cause': 'left_highway',
+                                                                           'rewards': reward,
+                                                                           'velocity': self.state['velocity'],
+                                                                           'distance': new_x - self.ego_start_position,
+                                                                           'lane_change': self.lanechange_counter}
 
             # TODO: ezt meg kéne máshogy oldani ne legyen runtime error
             terminated = False
