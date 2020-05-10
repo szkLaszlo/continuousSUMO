@@ -199,19 +199,13 @@ class SUMOEnvironment(gym.Env):
         # Getting initial environment state
         self.refresh_environment()
         # Init lateral model
+        # Setting a starting speed of the ego
+        self.state['velocity'] = self.desired_speed
         self.lateral_model = LateralModel(
-            x_position=self.state['x_position'],
-            y_position=self.state['y_position'],
-            # TODO: can be refactored to this if self.state['velocity'] is initiated with self.desired_speed earlier
-            # velocity=self.state['velocity'],
-            velocity=self.desired_speed,
-            heading=self.state['heading'],
-            lane_id=self.state['lane_id'],
+            self.state,
             lane_width=self.lane_width,
             dt=self.dt
         )
-        # Setting a starting speed of the ego
-        self.state['velocity'] = self.desired_speed
         return self.environment_state
 
     def render(self, mode='human'):

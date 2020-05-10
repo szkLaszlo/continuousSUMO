@@ -22,16 +22,15 @@ class LateralModel:
      Class for keeping track of the agent movement in case of continuous SUMO state space.
      """
 
-    def __init__(self, x_position, y_position, velocity, heading, lane_id, lane_width, dt=0.1):
+    def __init__(self, state, lane_width, dt=0.1):
         """
          Function to initiate the lateral Model, it will set the parameters.
-         :param x_position: initial x position of vehicle [m]
-         :param y_position: initial y  position of vehicle [m]
-         :param velocity: double, initial speed of the car in the direction of the heading [m/s]
-         :param heading: deg, initial heading of the vehicle from x axis [rad] NOTE: np.pi/2 is parallel to the y axis
-         :param lane_id: int, initial lane_id
+
+         :param state: dict,
          :param lane_width: float, width of initial lane in meters [m]
-         """
+         :param dt: timestep increment of the simulation
+        """
+
         # Initial lane position should be lane center
         self.lane_width = lane_width
         self.dt = dt
