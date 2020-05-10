@@ -253,6 +253,9 @@ class LateralModel:
 
 
 def main():
+    """
+    Example usage of the lateral state
+    """
     model = LateralModel(x_position=30,
                          y_position=0,
                          velocity=10,
