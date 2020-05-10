@@ -231,7 +231,7 @@ class LateralModel:
         :param road_curve:
         """
         # TODO: implement road curvature based update
-        self.in_lane_pos += dif_x
+        self.in_lane_pos += dif_y
 
         # Change to lane to the right
         if self.in_lane_pos < 0:
