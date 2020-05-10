@@ -208,26 +208,10 @@ class LateralModel:
 
         return np.array([v, phi])
 
-    @staticmethod
-    def trajgen_output(self, t, x, u, params):
-        """
-
-        :param self:
-        :param t:
-        :param x:
-        :param u:
-        :param params:
-        :return:
-        """
-        vref, yref = u
-        return np.array([vref * t, yref, 0, vref, 0])
-
     def update_in_lane_position(self, dif_x, dif_y, road_curve=None):
         """
         Update in lane position based on new position and lane curvature
         NOTE: now only works on a road with straight segments
-        :param dif_x: float, movement perpendicular to road segment tangent
-        :param dif_y:
         :param road_curve:
         """
         # TODO: implement road curvature based update
