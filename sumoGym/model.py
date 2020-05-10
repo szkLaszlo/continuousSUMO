@@ -243,28 +243,29 @@ def main():
     """
     Example usage of the lateral state
     """
-    model = LateralModel(x_position=30,
-                         y_position=0,
-                         velocity=10,
-                         heading=np.pi/2,
-                         lane_id=1,
+    state = {'x_position': 30,
+             'y_position': 0,
+             'velocity': 10,
+             'heading': -np.pi / 2,
+             'lane_id': 1,
+             'length': 5,
+             'width': 1.8
+             }
+    model = LateralModel(state,
                          lane_width=3.2)
     terminate = False
     counter = 0
     while not terminate:
         if counter % 100 == 0:
-            steering_angle = uniform(-np.pi/2, np.pi)
-            steering_angle = 0
+            steering_angle = uniform(-0.5, 0.5)
 
-        state = model.step(dt=0.1,
-                           steering_angle=steering_angle,
+        state = model.step(steering_angle=steering_angle,
                            velocity_dif=15,
                            )
 
         if counter == 1000:
             terminate = True
         counter += 1
-    pass
 
 
 if __name__ == '__main__':
