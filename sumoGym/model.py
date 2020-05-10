@@ -44,19 +44,23 @@ class LateralModel:
 
         # Initial ego vehicle state and parameters
         self.lateral_state = {
-            'heading': heading,
+            'heading': np.radians(state['heading']) - np.pi / 2,
             'steering_angle': self.steering_angle,
-            'x_position': x_position,
-            'y_position': y_position,
-            'velocity': velocity,
-            'lane_id': lane_id,
+            'x_position': state['x_position'],
+            'y_position': state['y_position'],
+            'velocity': state['velocity'],
+            'lane_id': state['lane_id'],
 
             # Vehicle parameters that are not supposed to update:
             # Vehicle dimensions for collision detection
-            'length': None,
-            'width': None,
-
+            'length': state['length'],
+            'width': state['width'],
         }
+
+        # Move from bumper to  vehicle center
+        self.lateral_state['x_position'] -= np.cos(self.lateral_state['heading']) * self.lateral_state['length']
+        self.lateral_state['y_position'] -= np.sin(self.lateral_state['heading']) * self.lateral_state['width']
+
         self.vehicle_params = {
             # Rear wheel offset in meters
             'refoffset': 1.5,
