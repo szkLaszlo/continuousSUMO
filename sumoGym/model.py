@@ -22,7 +22,7 @@ class LateralModel:
      Class for keeping track of the agent movement in case of continuous SUMO state space.
      """
 
-    def __init__(self, x_position, y_position, velocity, heading, lane_id, lane_width):
+    def __init__(self, x_position, y_position, velocity, heading, lane_id, lane_width, dt=0.1):
         """
          Function to initiate the lateral Model, it will set the parameters.
          :param x_position: initial x position of vehicle [m]
@@ -34,6 +34,7 @@ class LateralModel:
          """
         # Initial lane position should be lane center
         self.lane_width = lane_width
+        self.dt = dt
 
         # Initial steering angle is 0
         self.steering_angle = 0
@@ -84,7 +85,7 @@ class LateralModel:
             'lane_id': [self.lateral_state['lane_id']]
         }
 
-    def step(self, dt, steering_angle, velocity_dif):
+    def step(self, steering_angle, velocity_dif):
         """
          Function responsible for the action transform into the continuous state space.
          :param dt: float, time step [sec]
@@ -97,7 +98,7 @@ class LateralModel:
 
         # Simulate the system + estimator
         # Resolution of the trajectory
-        timesteps = np.array([0, dt])
+        timesteps = np.array([0, self.dt])
 
         # Velocity array
         v_curvy = np.full(timesteps.shape, self.lateral_state['velocity'])
