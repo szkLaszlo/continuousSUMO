@@ -19,7 +19,8 @@ def main():
     while True:
         terminate = False
         while not terminate:
-            action = 4  # int(input('next action'))
+            # action = [float(input('next steering')), float(input('next vel_dif'))]
+            action = [0.00, 0]
             state, reward, terminate, info = env.step(action)
             print(info)
         env.reset()
