@@ -44,7 +44,7 @@ class LateralModel:
 
         # Initial ego vehicle state and parameters
         self.lateral_state = {
-            'heading': np.radians(state['heading']) - np.pi / 2,
+            'heading': np.radians(state['heading']),
             'steering_angle': self.steering_angle,
             'x_position': state['x_position'],
             'y_position': state['y_position'],
@@ -56,10 +56,6 @@ class LateralModel:
             'length': state['length'],
             'width': state['width'],
         }
-
-        # Move from bumper to  vehicle center
-        self.lateral_state['x_position'] -= np.cos(self.lateral_state['heading']) * self.lateral_state['length']
-        self.lateral_state['y_position'] -= np.sin(self.lateral_state['heading']) * self.lateral_state['width']
 
         self.vehicle_params = {
             # Rear wheel offset in meters

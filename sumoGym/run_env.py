@@ -1,9 +1,12 @@
 """
 This script contains a basic usage of the environment.
 """
+import time
+
 import gym
 # This import must not be removed: import sumoGym.environment
 import sumoGym.environment
+import matplotlib.pyplot as plt
 
 
 def main():
@@ -20,8 +23,9 @@ def main():
         terminate = False
         while not terminate:
             # action = [float(input('next steering')), float(input('next vel_dif'))]
-            action = [0.00, 0]
+            action = [0.01, 0.0]
             state, reward, terminate, info = env.step(action)
+            time.sleep(0.1)
             print(info)
         env.reset()
 
