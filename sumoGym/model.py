@@ -26,7 +26,7 @@ class LateralModel:
         """
          Function to initiate the lateral Model, it will set the parameters.
 
-         :param state: dict,
+         :param state: dict of system state
          :param lane_width: float, width of initial lane in meters [m]
          :param dt: timestep increment of the simulation
         """
@@ -138,10 +138,10 @@ class LateralModel:
         """
         Update vehicle location
 
-        :param t: float, current time step, necessary for control library
-        :param x: 1-D array with shape (nstates,)
-        :param u: 1-D array with shape (ninputs,)
-        :param params:
+        :param t: ignored, time
+        :param x: system state
+        :param u: system input
+        :param params: model parameters
         :return:
         """
         # Get the parameters for the model
@@ -164,10 +164,11 @@ class LateralModel:
     @staticmethod
     def vehicle_output(t, x, u, params):
         """
-        Method truncating the recieved input
-        :param x: 1-D array with shape (nstates)
-        :param u:
-        :param params:
+        Truncate state
+        :param t: ignored, time
+        :param x: system state
+        :param u: ignored, system input
+        :param params: ignored, model params
         :return: 1-D array with shape (2)
         """
         return x[0:2]
@@ -175,12 +176,12 @@ class LateralModel:
     @staticmethod
     def control_output(t, x, u, params):
         """
-
-        :param t:
-        :param x:
-        :param u:
-        :param params:
-        :return:
+        Control output function of the system
+        :param t: ignored, time
+        :param x: ignored, system state
+        :param u: system input
+        :param params: system parameters
+        :return: velocity, heading array
         """
         # Get the controller parameters
         longpole = params.get('longpole', -2.)
@@ -209,9 +210,10 @@ class LateralModel:
         """
         Update in lane position based on new position and lane curvature
         NOTE: now only works on a road with straight segments
-        :param road_curve:
+        :param dif_x: ignored, float, position dif in y direction
+        :param dif_y: float, position dif in y direction
+        :param road_curve: ignored, for future curvy road support
         """
-        # TODO: implement road curvature based update
         self.in_lane_pos += dif_y
 
         # Change to lane to the right
