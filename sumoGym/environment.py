@@ -540,6 +540,9 @@ class SUMOEnvironment(gym.Env):
 
     def calculate_structured_environment(self, cars_around):
         """
+        DEPRECATED
+        TODO: refactor if needed
+        
         This fuction is deprecated, in the futute the implementation should be rethought based on the lateral control.
         :return:
         """
