@@ -129,6 +129,7 @@ class LateralModel:
         dif_y = new_y - self.lateral_state['y_position']
         self.update_in_lane_position(dif_x, dif_y, road_curve=None)
         self.update_absolute_position(new_x, new_y)
+        self.lateral_state['heading'] = heading
 
         return self.lateral_state
 
