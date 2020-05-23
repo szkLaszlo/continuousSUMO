@@ -9,13 +9,14 @@ import platform
 import random
 
 import gym
+import matplotlib.pyplot as plt
 import numpy as np
 import traci
 import traci.constants as tc
 from gym import spaces
 from traci import TraCIException, FatalTraCIError
 
-from sumoGym.model import LateralModel
+from SUMO.sumoGym.model import LateralModel
 
 
 class SUMOEnvironment(gym.Env):
@@ -61,12 +62,12 @@ class SUMOEnvironment(gym.Env):
         :type: describes what the observation space will be
         """
         if self.type_os == "image":
-            self.grid_per_meter = 4  # Defines the precision of the returned image
+            self.grid_per_meter = 1  # Defines the precision of the returned image
             x_range = 50  # symmetrically for front and back
             self.x_range_grid = x_range * self.grid_per_meter  # symmetrically for front and back
             y_range = 9  # symmetrically for left and right
             self.y_range_grid = y_range * self.grid_per_meter  # symmetrically for left and right
-            self.observation_space = np.zeros((2 * self.x_range_grid, 2 * self.y_range_grid, 3))
+            self.observation_space = np.zeros((3, 2 * self.x_range_grid, 2 * self.y_range_grid))
             # Assigning the environment call
             self.get_environment = self.calculate_image_environment
 
@@ -463,6 +464,12 @@ class SUMOEnvironment(gym.Env):
         ego_state = environment_collection[self.egoID]
         # Creating state representation as a matrix (image)
         environment_state = np.zeros((3, 2 * self.x_range_grid, 2 * self.y_range_grid))
+        # draw all the possible lanes
+        dy = int(np.rint((ego_state["y_position"] - self.lane_offset) * self.grid_per_meter))
+        l_d = int(np.ceil((self.lane_width / 2 * self.grid_per_meter)))
+        l_up = int(np.ceil((2 * self.lane_width + self.lane_width / 2) * self.grid_per_meter))
+        environment_state[1,:, self.y_range_grid + dy - l_up:self.y_range_grid + dy + l_d] = np.ones_like(
+            environment_state[1,:, self.y_range_grid + dy - l_up:self.y_range_grid + dy + l_d]) * 0.5
         # Drawing the image channels with actual data
         for car_id in environment_collection.keys():
             dx = int(np.rint((environment_collection[car_id]['x_position'] - ego_state[
@@ -484,12 +491,12 @@ class SUMOEnvironment(gym.Env):
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * environment_collection[car_id][
                                                                               'velocity'] / 50
 
-                # Drawing lane of the current car
-                environment_state[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
-                self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
-                    environment_state[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
-                    self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * environment_collection[car_id][
-                                                                              'lane_id'] / 2
+                # # Drawing lane of the current car
+                # environment_state[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                # self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
+                #     environment_state[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                #     self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * environment_collection[car_id][
+                #                                                               'lane_id'] / 2
 
                 # If ego, drawing the desired speed
                 if car_id == self.egoID:
@@ -497,7 +504,8 @@ class SUMOEnvironment(gym.Env):
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                         environment_state[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                         self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * self.desired_speed / 50
-        filename = os.path.join(os.path.curdir, "scenarios", f"{self.steps_done}.jpg")
+
+        # filename = os.path.join(os.path.curdir, "scenarios", f"{self.steps_done}.jpg")
         # plt.imshow(environment_state.transpose((2, 1, 0)))
         # plt.show()
         return environment_state, ego_state

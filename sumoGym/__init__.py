@@ -11,7 +11,7 @@ from gym.envs.registration import register
 
 register(
     id='SUMOEnvironment-v0',
-    entry_point='sumoGym.environment:SUMOEnvironment',
+    entry_point='SUMO.sumoGym.environment:SUMOEnvironment',
 )
 
 if 'SUMO_HOME' in os.environ:
