@@ -298,6 +298,7 @@ class SUMOEnvironment(gym.Env):
             if self.egoID in traci.simulation.getCollidingVehiclesIDList() or collision:
                 reward = self.reward_dict['collision'][1]
                 terminated = True
+                cause = 'collision'
                 self.egoID = None
                 self.environment_state *= 0
 
