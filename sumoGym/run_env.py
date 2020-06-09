@@ -5,7 +5,7 @@ import time
 
 import gym
 # This import must not be removed: import sumoGym.environment
-import sumoGym.environment
+import continuousSUMO.sumoGym.environment
 import matplotlib.pyplot as plt
 
 

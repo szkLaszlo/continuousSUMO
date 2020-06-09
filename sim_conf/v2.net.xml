@@ -4,7 +4,7 @@
 <configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
 
     <input>
-        <sumo-net-file value="/home/szoke/workspace/RLhighway/sumoProject/envs/v2.net.xml"/>
+        <continuousSUMO-net-file value="/home/szoke/workspace/RLhighway/sumoProject/envs/v2.net.xml"/>
     </input>
 
     <output>
