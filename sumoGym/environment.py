@@ -24,7 +24,7 @@ class SUMOEnvironment(gym.Env):
     """
 
     def __init__(self,
-                 simulation_directory='D:\\msc\\forth\\traffic\\continuousSUMOv1\\sim_conf',
+                 simulation_directory='../sim_conf',
                  type_os="image",
                  type_as="discrete",
                  reward_type='speed',

@@ -11,7 +11,7 @@ from gym.envs.registration import register
 
 register(
     id='SUMOEnvironment-v0',
-    entry_point='sumoGym.environment:SUMOEnvironment',
+    entry_point='continuousSUMO.sumoGym.environment:SUMOEnvironment',
 )
 
 if 'SUMO_HOME' in os.environ:
@@ -19,3 +19,4 @@ if 'SUMO_HOME' in os.environ:
     sys.path.append(tools)
 else:
     os.system('export SUMO_HOME="/usr/share/sumo"')
+    os.system('python3.7 /home/szl95/workspace_remote/continuousSUMO/sumoGym/setup.py')
