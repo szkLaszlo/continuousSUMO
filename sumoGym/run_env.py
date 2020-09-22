@@ -4,8 +4,8 @@ This script contains a basic usage of the environment.
 import time
 
 import gym
-# This import must not be removed: import sumoGym.environment
-import sumoGym.environment
+# This import must not be removed: import continuousSUMO.sumoGym.environment
+import continuousSUMO.sumoGym.environment
 import matplotlib.pyplot as plt
 
 

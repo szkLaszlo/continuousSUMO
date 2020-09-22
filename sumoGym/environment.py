@@ -15,7 +15,7 @@ import traci.constants as tc
 from gym import spaces
 from traci import TraCIException, FatalTraCIError
 
-from sumoGym.model import LateralModel
+from continuousSUMO.sumoGym.model import LateralModel
 
 
 class SUMOEnvironment(gym.Env):
