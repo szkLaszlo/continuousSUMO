@@ -86,12 +86,12 @@ class SUMOEnvironment(gym.Env):
         :type: describes what the observation space will be
         """
         if self.type_os == "image":
-            self.grid_per_meter = 4  # Defines the precision of the returned image
+            self.grid_per_meter = 1  # Defines the precision of the returned image
             x_range = 50  # symmetrically for front and back
             self.x_range_grid = x_range * self.grid_per_meter  # symmetrically for front and back
             y_range = 9  # symmetrically for left and right
             self.y_range_grid = y_range * self.grid_per_meter  # symmetrically for left and right
-            self.observation_space = np.zeros((2 * self.x_range_grid, 2 * self.y_range_grid, 3))
+            self.observation_space = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
             # Assigning the environment call
             self.get_environment = self.calculate_image_environment
 
