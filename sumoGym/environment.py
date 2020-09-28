@@ -18,6 +18,29 @@ from traci import TraCIException, FatalTraCIError
 from continuousSUMO.sumoGym.model import LateralModel
 
 
+def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
+                          simulation_directory=None,
+                          type_os="image",
+                          type_as="discrete",
+                          reward_type='speed',
+                          mode='none',
+                          change_speed_interval=100):
+    """
+    This function creates the gym environment. It is used for initiating the continuousSUMO package.
+    """
+    if simulation_directory is None:
+        file_path = os.path.dirname(os.path.abspath(__file__))
+        simulation_directory = os.path.join(os.path.split(file_path)[0], "sim_conf")
+
+    return gym.make(env_name,
+                    simulation_directory=simulation_directory,
+                    type_os=type_os,
+                    type_as=type_as,
+                    reward_type=reward_type,
+                    mode=mode,
+                    change_speed_interval=change_speed_interval)
+
+
 class SUMOEnvironment(gym.Env):
     """
 
@@ -28,8 +51,10 @@ class SUMOEnvironment(gym.Env):
                  type_os="image",
                  type_as="discrete",
                  reward_type='speed',
-                 mode='human',
+                 mode='none',
                  change_speed_interval=100):
+
+        super(SUMOEnvironment, self).__init__()
 
         # Basic gym environment variables
         # Type action space
@@ -81,15 +106,14 @@ class SUMOEnvironment(gym.Env):
         """
         if self.type_as == "continuous":
             # todo: hardcoded range of actions, first is steer 2. is acceleration command
-            # todo: radian or degree??? note: rad!
-            low = np.array([-1, -1])
-            high = np.array([1, 1])
+            low = np.array([-0.1, -1]) #radian, m/s2
+            high = np.array([0.1, 1]) # radian, m/s2
             self.action_space = spaces.Box(low, high, dtype=np.float)
             self.calculate_action = self.calculate_continuous_action
 
         elif self.type_as == "discrete":
             # todo: hardcoded steering and speed
-            self.steering_constant = [-1, 0, 1]  # [right, nothing, left] lane change
+            self.steering_constant = [-0.1, 0, 0.1]  # [right, nothing, left] change in radian
             self.accel_constant = [-0.7, 0.0, 0.3]  # are in m/s
             self.action_space = spaces.Discrete(9)
             self.calculate_action = self.calculate_discrete_action
@@ -110,9 +134,9 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0],
                                 'type': reward_type}
         elif reward_type == 'speed':
-            self.reward_dict = {'collision': [True, 0],
-                                'slow': [True, 0],
-                                'left_highway': [True, 0],
+            self.reward_dict = {'collision': [True, -1],
+                                'slow': [True, -1],
+                                'left_highway': [True, -1],
                                 'immediate': [False, 1],
                                 'success': [True, 1],
                                 'type': reward_type}
@@ -179,7 +203,7 @@ class SUMOEnvironment(gym.Env):
             self.sumoBinary = "/usr/share/sumo/bin/sumo-gui" if self.rendering else "/usr/share/sumo/bin/sumo"
 
         self.sumoCmd = [self.sumoBinary, "-c", self.simulation_list[0], "--start", "--quit-on-end",
-                        "--collision.mingap-factor", "4", "--collision.action", "remove", "--no-warnings", "1",
+                        "--collision.mingap-factor", "1", "--collision.action", "remove", "--no-warnings", "1",
                         "--random"]
 
         traci.start(self.sumoCmd[:4])
@@ -296,6 +320,7 @@ class SUMOEnvironment(gym.Env):
             # Checking abnormal cases for ego (if events happened which terminate the simulation)
             if self.egoID in traci.simulation.getCollidingVehiclesIDList() or collision:
                 reward = self.reward_dict['collision'][1]
+                cause = "collision" if cause is None else cause
                 terminated = True
                 self.egoID = None
                 self.environment_state *= 0
@@ -311,8 +336,8 @@ class SUMOEnvironment(gym.Env):
                 # Case for completing the highway without a problem
                 cause = None
                 reward = self.reward_dict['success'][1]
-                self.egoID = None
                 terminated = True
+                self.egoID = None
                 self.environment_state *= 0
 
             else:
@@ -462,7 +487,7 @@ class SUMOEnvironment(gym.Env):
         """
         ego_state = environment_collection[self.egoID]
         # Creating state representation as a matrix (image)
-        environment_state = np.zeros((3, 2 * self.x_range_grid, 2 * self.y_range_grid))
+        environment_state = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
         # Drawing the image channels with actual data
         for car_id in environment_collection.keys():
             dx = int(np.rint((environment_collection[car_id]['x_position'] - ego_state[
@@ -497,7 +522,15 @@ class SUMOEnvironment(gym.Env):
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                         environment_state[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                         self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * self.desired_speed / 50
-        filename = os.path.join(os.path.curdir, "scenarios", f"{self.steps_done}.jpg")
+                    if self.lateral_state is None:
+                        heading = np.radians(environment_collection[car_id]["heading"])
+                    else: heading = self.lateral_state["heading"]
+                    environment_state[3, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                    self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
+                        environment_state[3, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                        self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * heading
+
+        # filename = os.path.join(os.path.curdir, "scenarios", f"{self.steps_done}.jpg")
         # plt.imshow(environment_state.transpose((2, 1, 0)))
         # plt.show()
         return environment_state, ego_state

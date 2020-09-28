@@ -19,4 +19,3 @@ if 'SUMO_HOME' in os.environ:
     sys.path.append(tools)
 else:
     os.system('export SUMO_HOME="/usr/share/sumo"')
-    os.system('python3.7 /home/szl95/workspace_remote/continuousSUMO/sumoGym/setup.py')
