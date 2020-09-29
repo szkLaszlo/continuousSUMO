@@ -485,7 +485,9 @@ class SUMOEnvironment(gym.Env):
         where the last dimension is the channels of speed, lane_id, and desired speed
         :return ego_state: dict of {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
         """
-        ego_state = environment_collection[self.egoID]
+        ego_state = environment_collection.get(self.egoID, None)
+        if ego_state is None:
+            raise RuntimeError
         # Creating state representation as a matrix (image)
         environment_state = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
         # Drawing the image channels with actual data
