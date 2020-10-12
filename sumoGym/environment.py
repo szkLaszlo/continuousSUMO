@@ -7,6 +7,7 @@ import copy
 import os
 import platform
 import random
+from time import sleep
 
 import gym
 import numpy as np
@@ -114,7 +115,7 @@ class SUMOEnvironment(gym.Env):
         elif self.type_as == "discrete":
             # todo: hardcoded steering and speed
             self.steering_constant = [-0.1, 0, 0.1]  # [right, nothing, left] change in radian
-            self.accel_constant = [-0.7, 0.0, 0.3]  # are in m/s
+            self.accel_constant = [-1.2, 0.0, 0.3]  # are in m/s
             self.action_space = spaces.Discrete(9)
             self.calculate_action = self.calculate_discrete_action
         else:
@@ -134,9 +135,9 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0],
                                 'type': reward_type}
         elif reward_type == 'speed':
-            self.reward_dict = {'collision': [True, -1],
+            self.reward_dict = {'collision': [True, -2],
                                 'slow': [True, -1],
-                                'left_highway': [True, -1],
+                                'left_highway': [True, -0.5],
                                 'immediate': [False, 1],
                                 'success': [True, 1],
                                 'type': reward_type}
@@ -171,6 +172,7 @@ class SUMOEnvironment(gym.Env):
         # Loading variables with real values from traci
         # todo: hardcoded places of the highway.. this should be handled from code.
         self.lane_width = traci.lane.getWidth('A_0')
+        self.end_zone = traci.junction.getPosition("gneJ21")[0]
         self.lane_offset = traci.junction.getPosition('J1')[1] - 2 * self.lane_width - self.lane_width / 2
         self.dt = traci.simulation.getDeltaT()
         self.egoID = None  # Resetting chosen ego vehicle id
@@ -216,6 +218,10 @@ class SUMOEnvironment(gym.Env):
             self.start()
             return self.reset()
         except TraCIException:
+            self.stop()
+            self.start()
+            return self.reset()
+        except RuntimeError:
             self.stop()
             self.start()
             return self.reset()
@@ -287,12 +293,13 @@ class SUMOEnvironment(gym.Env):
 
             # Setting vehicle speed according to selected action
             traci.vehicle.setSpeed(self.egoID, self.lateral_state['velocity'])
-
+            reward = 0
             # Potentially update lane
             # Checking if new lane is still on the road
             try:
                 if self.lateral_state['lane_id'] != self.state['lane_id']:
                     self.lanechange_counter += 1  # Storing successful lane change
+                    reward = -0.5
                 lane_new = last_lane + str(self.lateral_state['lane_id'])
                 edgeID = traci.lane.getEdgeID(lane_new)
                 traci.vehicle.moveToXY(self.egoID, edgeID, self.lateral_state['lane_id'],
@@ -312,6 +319,8 @@ class SUMOEnvironment(gym.Env):
                                                                        'distance': new_x - self.ego_start_position,
                                                                        'lane_change': self.lanechange_counter}
             terminated = False
+            if self.rendering:
+                sleep(0)
             traci.simulationStep()
             environment_collection = self.get_simulation_environment()
             environment_collection[self.egoID] = copy.deepcopy(self.lateral_state)
@@ -332,7 +341,7 @@ class SUMOEnvironment(gym.Env):
                 self.egoID = None
                 self.environment_state *= 0
 
-            elif self.egoID in traci.simulation.getArrivedIDList():
+            elif self.egoID in traci.simulation.getArrivedIDList() or self.lateral_state['x_position'] > self.end_zone:
                 # Case for completing the highway without a problem
                 cause = None
                 reward = self.reward_dict['success'][1]
@@ -343,7 +352,7 @@ class SUMOEnvironment(gym.Env):
             else:
                 # Case for successful step
                 cause = None
-                reward = self.calculate_immediate_reward()
+                reward += self.calculate_immediate_reward()
                 self.steps_done += 1
                 self.refresh_environment(environment_collection)
 
