@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 def main():
     # Modify simulation_directory for your directory path
     env = gym.make('SUMOEnvironment-v0',
-                   simulation_directory='../sim_conf',
+                   simulation_directory='../basic_env',
                    type_os="image",
-                   type_as='continuous',
+                   type_as='discrete',
                    reward_type='speed',
                    mode='none',
                    change_speed_interval=100,

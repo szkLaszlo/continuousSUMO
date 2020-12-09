@@ -15,7 +15,6 @@ import traci
 import traci.constants as tc
 from gym import spaces
 from traci import TraCIException, FatalTraCIError
-
 from continuousSUMO.sumoGym.model import LateralModel
 
 
@@ -171,9 +170,9 @@ class SUMOEnvironment(gym.Env):
         # setting basic environment variables
         # Loading variables with real values from traci
         # todo: hardcoded places of the highway.. this should be handled from code.
-        self.lane_width = traci.lane.getWidth('A_0')
-        self.end_zone = traci.junction.getPosition("gneJ21")[0]
-        self.lane_offset = traci.junction.getPosition('J1')[1] - 2 * self.lane_width - self.lane_width / 2
+        self.lane_width = traci.lane.getWidth(f"{traci.route.getEdges(traci.route.getIDList()[0])[0]}_0")
+        self.end_zone = traci.junction.getPosition(traci.junction.getIDList()[-1])[0]
+        self.lane_offset = traci.junction.getPosition(traci.junction.getIDList()[0])[1] - 2 * self.lane_width - self.lane_width / 2
         self.dt = traci.simulation.getDeltaT()
         self.egoID = None  # Resetting chosen ego vehicle id
         self.steps_done = 0  # resetting steps done
