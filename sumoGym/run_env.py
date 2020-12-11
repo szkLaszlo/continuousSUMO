@@ -1,6 +1,7 @@
 """
 This script contains a basic usage of the environment.
 """
+import random
 import time
 
 import gym
@@ -23,12 +24,14 @@ def main():
         terminate = False
         while not terminate:
             # action = [float(input('next steering')), float(input('next vel_dif'))]
-            action = [0.01, 0.0]
+            action = random.randint(0,8)
             state, reward, terminate, info = env.step(action)
             time.sleep(0.1)
-            print(info)
+            if terminate:
+                print(info)
         env.reset()
 
 
 if __name__ == "__main__":
+    random.seed(100)
     main()
