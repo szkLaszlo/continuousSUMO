@@ -110,7 +110,7 @@ class SUMOEnvironment(gym.Env):
 
         self.sumoCmd = [self.sumoBinary, "-c", self.simulation_list[0], "--start", "--quit-on-end",
                         # "--lateral-resolution", "0.8",
-                        "--collision.mingap-factor", "0", "--collision.action", "warn", "--no-warnings", "0",
+                        "--collision.mingap-factor", "0", "--collision.action", "warn", "--no-warnings", "1",
                         "--random"
                         ]
 
@@ -320,22 +320,23 @@ class SUMOEnvironment(gym.Env):
         steering_angle, velocity_dif = self.calculate_action(action)
         # setting speed for the vehicle
         traci.vehicle.setSpeed(self.egoID, self.state['velocity'] + velocity_dif)
-        # traci.vehicle.changeLaneRelative(self.egoID, steering_angle, self.dt)
-        prev_lane = traci.vehicle.getLaneID(self.egoID)
-        lane_id = traci.vehicle.getLaneIndex(self.egoID)
         if steering_angle != 0:
-            # setting lane for the vehicle
-            self.lanechange_counter += 1
-            lane_id +=  steering_angle
-            # edgeID = traci.lane.getEdgeID(prev_lane)
-            # traci.vehicle.moveToXY(self.egoID, edgeID, lane_id,
-            #                    self.state['x_position']+traci.vehicle.getSpeed(self.egoID)*self.dt,
-            #                    self.state['y_position'],
-            #                    angle=tc.INVALID_DOUBLE_VALUE, keepRoute=1)
-            # traci.vehicle.changeTarget(self.egoID, traci.route.getEdges(traci.route.getIDList()[0])[-1])
-
-        target_lane = prev_lane[:-1]+str(lane_id)
-        traci.vehicle.moveTo(self.egoID, laneID=target_lane, pos=self.state["x_position"])
+            traci.vehicle.changeLaneRelative(self.egoID, steering_angle, self.dt)
+        # prev_lane = traci.vehicle.getLaneID(self.egoID)
+        # lane_id = traci.vehicle.getLaneIndex(self.egoID)
+        # if steering_angle != 0:
+        #     # setting lane for the vehicle
+        #     self.lanechange_counter += 1
+        #     lane_id +=  steering_angle
+        #     # edgeID = traci.lane.getEdgeID(prev_lane)
+        #     # traci.vehicle.moveToXY(self.egoID, edgeID, lane_id,
+        #     #                    self.state['x_position']+traci.vehicle.getSpeed(self.egoID)*self.dt,
+        #     #                    self.state['y_position'],
+        #     #                    angle=tc.INVALID_DOUBLE_VALUE, keepRoute=1)
+        #     # traci.vehicle.changeTarget(self.egoID, traci.route.getEdges(traci.route.getIDList()[0])[-1])
+        #
+        # target_lane = prev_lane[:-1]+str(lane_id)
+        # traci.vehicle.moveTo(self.egoID, laneID=target_lane, pos=self.state["x_position"])
 
     def _inner_step(self, action):
         """
@@ -366,13 +367,8 @@ class SUMOEnvironment(gym.Env):
             if self.rendering:
                 sleep(0.5)
             traci.simulationStep()
-            environment_collection = self._get_simulation_environment()
-
-            if "continuous" in self.type_as:
-                environment_collection[self.egoID] = copy.deepcopy(self.state)
-
             # getting termination values
-            cause, reward, terminated = self._get_terminating_events(environment_collection)
+            cause, reward, terminated = self._get_terminating_events()
 
             return self.observation, reward, terminated, {'cause': cause, 'rewards': reward,
                                                           'velocity': self.state['velocity'],
@@ -383,22 +379,22 @@ class SUMOEnvironment(gym.Env):
             raise RuntimeError('After terminated episode, reset is needed. '
                                'Please run env.reset() before starting a new episode.')
 
-    def _get_terminating_events(self, environment_collection):
+    def _get_terminating_events(self):
         reward = 0
         terminated = False
 
         # Checking abnormal cases for ego (if events happened which terminate the simulation)
-        if self.egoID in traci.simulation.getCollidingVehiclesIDList() or self._check_collision( environment_collection):
-            reward = self.reward_dict['collision'][1]
-            cause = "collision"
+        if self.egoID in traci.simulation.getArrivedIDList() and self.state['x_position'] >= self.end_zone-10:
+            # Case for completing the highway without a problem
+            cause = None
+            reward = self.reward_dict['success'][1]
             terminated = True
             self.egoID = None
             self.observation *= 0
 
-        elif self.egoID in traci.simulation.getArrivedIDList() or self.state['x_position'] >= self.end_zone-2:
-            # Case for completing the highway without a problem
-            cause = None
-            reward = self.reward_dict['success'][1]
+        elif self.egoID in traci.simulation.getCollidingVehiclesIDList():# or self._check_collision( environment_collection):
+            reward = self.reward_dict['collision'][1]
+            cause = "collision"
             terminated = True
             self.egoID = None
             self.observation *= 0
@@ -413,6 +409,9 @@ class SUMOEnvironment(gym.Env):
         else:
             # Case for successful step
             cause = None
+            environment_collection = self._get_simulation_environment()
+            if "continuous" in self.type_as:
+                environment_collection[self.egoID] = copy.deepcopy(self.state)
             reward += self._calculate_immediate_reward()
             self.steps_done += 1
             self._refresh_environment(environment_collection)
@@ -475,6 +474,7 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.subscribeContext(self.egoID,tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
                                                varIDs=[tc.VAR_SPEED, tc.VAR_LANE_INDEX, tc.VAR_ANGLE, tc.VAR_POSITION,
                                                 tc.VAR_LENGTH, tc.VAR_WIDTH])
+                traci.junction.subscribeContext("C", tc.CMD_GET_VEHICLE_VARIABLE,dist=50)
                 if self.rendering:
                     traci.gui.trackVehicle('View #0', self.egoID)
         else:
@@ -598,7 +598,8 @@ class SUMOEnvironment(gym.Env):
                              'lane_id': car[tc.VAR_LANE_INDEX],
                              'heading': fi}
                 environment_collection[car_id] = copy.copy(car_state)
-
+        else:
+            raise TraCIException
         return environment_collection
 
     def _calculate_image_environment(self, env):
