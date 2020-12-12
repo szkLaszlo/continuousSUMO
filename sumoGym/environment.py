@@ -7,8 +7,14 @@ import copy
 import os
 import platform
 import random
+import socket
+import subprocess
+import threading
+import time
 from time import sleep
+from io import StringIO
 
+import cv2
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,7 +38,7 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
     """
     if simulation_directory is None:
         file_path = os.path.dirname(os.path.abspath(__file__))
-        simulation_directory = os.path.join(os.path.split(file_path)[0], "sim_conf")
+        simulation_directory = os.path.join(os.path.split(file_path)[0], "basic_env")
 
     return gym.make(env_name,
                     simulation_directory=simulation_directory,
@@ -55,6 +61,7 @@ class SUMOEnvironment(gym.Env):
                  reward_type='speed',
                  mode='none',
                  radar_range=None,
+                 flatten=True,
                  change_speed_interval=100):
 
         super(SUMOEnvironment, self).__init__()
@@ -71,10 +78,11 @@ class SUMOEnvironment(gym.Env):
 
         # Type observation
         self.type_os = type_os
+        self.flatten = flatten
         self._setup_observation_space(*radar_range)
         self._setup_action_space()
         self._setup_reward_system(reward_type=reward_type)
-        self._max_episode_steps = 2500
+        self.max_num_steps = 70
         self.rendering = True if mode == 'human' else False
 
         # Simulation data and constants
@@ -85,9 +93,13 @@ class SUMOEnvironment(gym.Env):
 
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
-
+        # self.log = StdOut()
+        # self.serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.serv.bind(('0.0.0.0', 11223))
+        # self.serv.listen(5)
         self.start()
         self.reset()
+
 
     def stop(self):
         """
@@ -110,8 +122,14 @@ class SUMOEnvironment(gym.Env):
 
         self.sumoCmd = [self.sumoBinary, "-c", self.simulation_list[0], "--start", "--quit-on-end",
                         # "--lateral-resolution", "0.8",
-                        "--collision.mingap-factor", "0", "--collision.action", "warn", "--no-warnings", "1",
-                        "--random"
+                        "--collision.mingap-factor", "0",
+                        "--collision.action", "remove",
+                        "--no-warnings", "1",
+                        "--seed", "42",
+                        # "--log", "stdout.txt",
+                        # "--step-log.period", "1",
+                        # "--error-log", "errors.txt",
+                        # "--duration-log.statistics"
                         ]
 
         traci.start(self.sumoCmd[:4])
@@ -145,9 +163,9 @@ class SUMOEnvironment(gym.Env):
         self._setup_basic_environment_values()
         # Running simulation until ego can be inserted
         self._select_egos()
-        environment_collection = self._get_simulation_environment()
+        self._get_simulation_environment()
         # Getting initial environment state
-        self._refresh_environment(environment_collection)
+        self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
         self.state['velocity'] = self.desired_speed
@@ -172,6 +190,8 @@ class SUMOEnvironment(gym.Env):
             self.x_range_grid = x_range * self.grid_per_meter  # symmetrically for front and back
             self.y_range_grid = y_range * self.grid_per_meter  # symmetrically for left and right
             self.observation_space = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
+            if self.flatten:
+                self.observation_space = gym.spaces.Discrete(self.observation_space.flatten().shape[0])
             # Assigning the environment call
             self.get_environment = self._calculate_image_environment
 
@@ -224,11 +244,12 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0],
                                 'type': reward_type}
         elif reward_type == 'speed':
-            self.reward_dict = {'collision': [True, -2],
-                                'slow': [True, -1],
-                                'left_highway': [True, -0.5],
-                                'immediate': [False, 1],
-                                'success': [True, 1],
+            self.reward_dict = {'collision': [True, 1.0, True],
+                                'slow': [True, 1.0, True],
+                                'left_highway': [True, 1.0, True],
+                                'immediate': [False, 1.0, True],
+                                'success': [True, 0.0, False],
+                                'lane_change': [False, 1.0, True],
                                 'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
@@ -269,17 +290,39 @@ class SUMOEnvironment(gym.Env):
         self.steps_done = 0  # resetting steps done
         self.desired_speed = random.randint(120, 160) / 3.6
         self.state = None
+        self.observation = None
+        self.env_obs = None
         self.lane_change_counter = 0
         self.time_to_change_des_speed = np.random.randint(100, 250)
         self.ego_start_position = 10000  # used for result display
         self.lanechange_counter = 0
 
-    def render(self, mode='human'):
-        """
-        Basic function of the OpenAI gym, this does not require anything
-        :param mode:
-        """
-        pass
+    def render(self, mode="human"):
+
+        if self.render_mode == 'human':
+            img, _ = self._calculate_image_environment(False)
+            img = img.transpose((1,2,0))[:,:,:-1]
+            if self.save_path is not None:
+                dir_name = os.path.split(self.save_path)[0]
+                if not os.path.exists(dir_name):
+                    os.makedirs(dir_name)
+                im = np.zeros((500, 90, 3))
+                scale_x = int(np.ceil(im.shape[0] // img.shape[0]))
+                scale_y = int(np.ceil(im.shape[1] // img.shape[1]))
+                for k in range(0, im.shape[0], scale_x):
+                    for j in range(0, im.shape[1], scale_y):
+                        value = img[k // scale_x, j // scale_y]
+
+                        im[k:k + scale_x, j:j + scale_y] = value * 255 * np.ones_like(
+                            (im[k:k + scale_x, j:j + scale_y]))
+                cv2.imwrite(f"{self.save_path}_img{self.steps_done}.jpg", img=im)
+            else:
+                plt.imshow(img)
+                plt.show()
+
+    def set_render(self, mode, save_path=None):
+        self.render_mode = mode
+        self.save_path = save_path
 
     def step(self, action):
         try:
@@ -321,9 +364,15 @@ class SUMOEnvironment(gym.Env):
         # setting speed for the vehicle
         traci.vehicle.setSpeed(self.egoID, self.state['velocity'] + velocity_dif)
         if steering_angle != 0:
-            traci.vehicle.changeLaneRelative(self.egoID, steering_angle, self.dt)
+            self.lanechange_counter +=1
+            lane = traci.vehicle.getLaneIndex(self.egoID)
+            lane += steering_angle
+            traci.vehicle.changeLane(self.egoID, lane, self.dt)
+            return True
+
+        return False
         # prev_lane = traci.vehicle.getLaneID(self.egoID)
-        # lane_id = traci.vehicle.getLaneIndex(self.egoID)
+        #
         # if steering_angle != 0:
         #     # setting lane for the vehicle
         #     self.lanechange_counter += 1
@@ -346,31 +395,30 @@ class SUMOEnvironment(gym.Env):
         """
         # Collecting the ids of online vehicles
         IDsOfVehicles = traci.vehicle.getIDList()
-
         # Checking if ego is still alive
+        is_lane_change = False
         if self.egoID in IDsOfVehicles:
             # try to place the vehicle to the required position
             try:
-                self.model_step(action)
+                is_lane_change = self.model_step(action)
             # if the lane can not be selected, the model_step will throw an error
             except TraCIException as exc:
                 if "lane" in exc.args[0]:
-                    reward = self.reward_dict['left_highway'][1]
-                    new_x = \
-                        traci.vehicle.getContextSubscriptionResults(self.egoID)[self.egoID][tc.VAR_POSITION][0]
-                    self.egoID = None
-                    return self.observation * 0., reward, True, {'cause': 'left_highway',
-                                                                 'rewards': reward,
-                                                                 'velocity': self.state['velocity'],
-                                                                 'distance': new_x - self.ego_start_position,
-                                                                 'lane_change': self.lanechange_counter}
+                    cause, reward, terminated = self._get_terminating_events(True, left_=True)
+                    self.render()
+                    return self.observation, sum(reward), terminated, {'cause': cause, 'cumulants': reward,
+                                                           'velocity': self.state['velocity'],
+                                                           'distance': self.state['x_position']
+                                                                       - self.ego_start_position,
+                                                           'lane_change': self.lanechange_counter}
             if self.rendering:
                 sleep(0.5)
+
             traci.simulationStep()
             # getting termination values
-            cause, reward, terminated = self._get_terminating_events()
-
-            return self.observation, reward, terminated, {'cause': cause, 'rewards': reward,
+            cause, reward, terminated = self._get_terminating_events(is_lane_change)
+            self.render()
+            return self.observation, sum(reward), terminated, {'cause': cause, 'cumulants': reward,
                                                           'velocity': self.state['velocity'],
                                                           'distance': self.state['x_position']
                                                                       - self.ego_start_position,
@@ -379,21 +427,28 @@ class SUMOEnvironment(gym.Env):
             raise RuntimeError('After terminated episode, reset is needed. '
                                'Please run env.reset() before starting a new episode.')
 
-    def _get_terminating_events(self):
-        reward = 0
+    def _get_terminating_events(self, is_lane_change, left_=False):
+        temp_reward = copy.deepcopy(self.reward_dict)
         terminated = False
 
+        if left_:
+            cause = "left_highway"
+            temp_reward['left_highway'] = self.reward_dict['left_highway'][1]
+            terminated = True
+            self.egoID = None
+            self.observation *= 0
+
         # Checking abnormal cases for ego (if events happened which terminate the simulation)
-        if self.egoID in traci.simulation.getArrivedIDList() and self.state['x_position'] >= self.end_zone-10:
+        elif self.egoID in traci.simulation.getArrivedIDList() and self.state['x_position'] >= self.end_zone-10:
             # Case for completing the highway without a problem
             cause = None
-            reward = self.reward_dict['success'][1]
+            temp_reward['success'] = self.reward_dict['success'][1]
             terminated = True
             self.egoID = None
             self.observation *= 0
 
         elif self.egoID in traci.simulation.getCollidingVehiclesIDList():# or self._check_collision( environment_collection):
-            reward = self.reward_dict['collision'][1]
+            temp_reward['collision'] = self.reward_dict['collision'][1]
             cause = "collision"
             terminated = True
             self.egoID = None
@@ -401,7 +456,7 @@ class SUMOEnvironment(gym.Env):
 
         elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (50 / 3.6):
             cause = 'slow' if self.reward_dict['slow'][0] else None
-            reward = self.reward_dict[cause][1]
+            temp_reward['slow'] = self.reward_dict[cause][1]
             terminated = True
             self.egoID = None
             self.observation *= 0
@@ -409,12 +464,18 @@ class SUMOEnvironment(gym.Env):
         else:
             # Case for successful step
             cause = None
-            environment_collection = self._get_simulation_environment()
+            self._get_simulation_environment()
             if "continuous" in self.type_as:
-                environment_collection[self.egoID] = copy.deepcopy(self.state)
-            reward += self._calculate_immediate_reward()
+                self.env_obs[self.egoID] = copy.deepcopy(self.state)
             self.steps_done += 1
-            self._refresh_environment(environment_collection)
+            self._refresh_environment()
+
+        temp_reward["immediate"] = self._calculate_immediate_reward()
+
+        if is_lane_change:
+            temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
+
+        reward = self.get_max_reward(temp_reward)
 
         return cause, reward, terminated
 
@@ -459,6 +520,7 @@ class SUMOEnvironment(gym.Env):
                 if self.egoID is None:
                     self.egoID = IDsOfVehicles[-1]
                     self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
+
                 # Setting ego simulation variables to be controlled by us (not SUMO)
                 traci.vehicle.setLaneChangeMode(self.egoID, 0x0)
                 traci.vehicle.setSpeedMode(self.egoID, 0x0)
@@ -563,7 +625,7 @@ class SUMOEnvironment(gym.Env):
             raise ValueError("this type of action is not supported")
         return [steer, acc]
 
-    def _refresh_environment(self, environment_collection):
+    def _refresh_environment(self):
         """
         This is used to refresh the environment
         Sets environment state in the shape of [1, range_x, range_y, 3]
@@ -572,7 +634,7 @@ class SUMOEnvironment(gym.Env):
         -------
 
         """
-        self.observation, self.state = self.get_environment(environment_collection)
+        self.observation, self.state = self.get_environment()
 
     def _get_simulation_environment(self):
         """
@@ -600,46 +662,48 @@ class SUMOEnvironment(gym.Env):
                 environment_collection[car_id] = copy.copy(car_state)
         else:
             raise TraCIException
-        return environment_collection
 
-    def _calculate_image_environment(self, env):
+        self.env_obs = environment_collection
+
+    def _calculate_image_environment(self, flatten=True):
         """
-        :param env: dict of environmental objects in scene
+        :param env_obs: dict of environmental objects in scene
         :return observation: [4, range_x, range_y]
         where the last dimension is the channels of speed, lane_id, and desired speed
         :return ego_state: dict of {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
         """
-        ego_state = env.get(self.egoID, self.state)
+
+        ego_state = self.env_obs.get(self.egoID, self.state)
 
         # Creating state representation as a matrix (image)
         observation = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
         # Drawing the image channels with actual data
-        for car_id in env.keys():
-            dx = int(np.rint((env[car_id]['x_position'] - ego_state["x_position"]) * self.grid_per_meter))
-            dy = int(np.rint((ego_state["y_position"] - env[car_id]['y_position']) * self.grid_per_meter))
-            l = int(np.ceil(env[car_id]['length'] / 2 * self.grid_per_meter))
-            w = int(np.ceil(env[car_id]['width'] / 2 * self.grid_per_meter))
+        for car_id in self.env_obs.keys():
+            dx = int(np.rint((self.env_obs[car_id]['x_position'] - ego_state["x_position"]) * self.grid_per_meter))
+            dy = int(np.rint((ego_state["y_position"] - self.env_obs[car_id]['y_position']) * self.grid_per_meter))
+            l = int(np.ceil(self.env_obs[car_id]['length'] / 2 * self.grid_per_meter))
+            w = int(np.ceil(self.env_obs[car_id]['width'] / 2 * self.grid_per_meter))
 
             # Only if car is in the range
-            if (abs(dx) < (self.x_range_grid - env[car_id]['length'] / 2 * self.grid_per_meter)) \
+            if (abs(dx) < (self.x_range_grid - self.env_obs[car_id]['length'] / 2 * self.grid_per_meter)) \
                     and abs(dy) < (
-                    self.y_range_grid - env[car_id]['width'] / 2 * self.grid_per_meter):
+                    self.y_range_grid - self.env_obs[car_id]['width'] / 2 * self.grid_per_meter):
 
                 # Drawing speed of the current car
-                velocity = env[car_id]['velocity'] / 50
+                velocity = self.env_obs[car_id]['velocity'] / 50
                 observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * velocity
 
                 # Drawing lane of the current car
-                lane_id = env[car_id]['lane_id'] / 2
+                lane_id = self.env_obs[car_id]['lane_id'] / 2
                 observation[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * lane_id
 
-                heading = np.radians(env[car_id]["heading"]) / 2 / np.pi
+                heading = np.radians(self.env_obs[car_id]["heading"]) / 2 / np.pi
                 observation[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
@@ -654,6 +718,8 @@ class SUMOEnvironment(gym.Env):
 
         # plt.imshow(observation.transpose((1, 2, 0))[:, :, :3])
         # plt.show()
+        if flatten:
+            observation = observation.flatten()
         return observation, ego_state
 
     def _calculate_structured_environment(self, cars_around):
@@ -732,3 +798,23 @@ class SUMOEnvironment(gym.Env):
         #  the others like dx dy should be...
         environment_state['des_speed'] = self.desired_speed
         return environment_state, ego_state
+
+    def calculate_good_objects_based_on_policy(self, policy):
+        return self.get_max_reward(policy)
+
+    def get_max_reward(self,temp_reward):
+        reward = []
+        if isinstance(temp_reward, dict):
+            for idx, value in temp_reward.items():
+                if isinstance(value, list) and self.reward_dict[idx][2]:
+                    reward.append(0.0)
+                elif isinstance(value, (int, float)) and self.reward_dict[idx][2]:
+                    reward.append(value)
+
+        elif isinstance(temp_reward, np.ndarray):
+            reward = []
+            for idx, value in self.reward_dict.items():
+                if isinstance(value, list) and value[2]:
+                    reward.append(value[1])
+            reward = np.asarray(reward,dtype=np.float32) * temp_reward
+        return reward
