@@ -251,12 +251,12 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0],
                                 'type': reward_type}
         elif reward_type == 'speed':
-            self.reward_dict = {'collision': [True, 1.0, True],
-                                'slow': [True, 1.0, True],
-                                'left_highway': [True, 1.0, True],
+            self.reward_dict = {'collision': [True, -1.0, True],
+                                'slow': [True, -1.0, True],
+                                'left_highway': [True, -1.0, True],
                                 'immediate': [False, 1.0, True],
                                 'success': [True, 0.0, False],
-                                'lane_change': [False, 1.0, True],
+                                'lane_change': [False, 1.0, False],
                                 'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
