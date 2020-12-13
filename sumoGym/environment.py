@@ -32,6 +32,7 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                           type_as="discrete",
                           reward_type='speed',
                           mode='none',
+                          save_log_path=None,
                           change_speed_interval=100):
     """
     This function creates the gym environment. It is used for initiating the continuousSUMO package.
@@ -46,6 +47,7 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                     type_as=type_as,
                     reward_type=reward_type,
                     mode=mode,
+                    save_log_path=save_log_path,
                     change_speed_interval=change_speed_interval)
 
 
@@ -62,6 +64,7 @@ class SUMOEnvironment(gym.Env):
                  mode='none',
                  radar_range=None,
                  flatten=True,
+                 save_log_path=None,
                  change_speed_interval=100):
 
         super(SUMOEnvironment, self).__init__()
@@ -90,7 +93,9 @@ class SUMOEnvironment(gym.Env):
         self.sumoCmd = None
         self.simulation_list = self._get_possible_simulations(simulation_directory)
         self.min_departed_vehicles = 3
-
+        self.save_log_path = save_log_path if save_log_path is not None else "stdout"
+        if self.save_log_path != "stdout" and not os.path.exists(self.save_log_path):
+            os.makedirs(self.save_log_path)
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
         # self.log = StdOut()
@@ -125,7 +130,9 @@ class SUMOEnvironment(gym.Env):
                         "--collision.mingap-factor", "0",
                         "--collision.action", "remove",
                         "--no-warnings", "1",
-                        "--seed", "42",
+                        "--random",
+                        "--full-output", f"{self.save_log_path}/log.txt",
+                        # "--seed", "42",
                         # "--log", "stdout.txt",
                         # "--step-log.period", "1",
                         # "--error-log", "errors.txt",
@@ -661,7 +668,7 @@ class SUMOEnvironment(gym.Env):
                              'heading': fi}
                 environment_collection[car_id] = copy.copy(car_state)
         else:
-            raise TraCIException
+            raise TraCIException("Failed to restart, trying again...")
 
         self.env_obs = environment_collection
 
