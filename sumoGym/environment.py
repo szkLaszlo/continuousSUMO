@@ -192,17 +192,22 @@ class SUMOEnvironment(gym.Env):
         :param: x_range: defines the radar range symmetrically for front and back
         :param: y_range: defines the radar range symmetrically for the sides
         """
+        self.grid_per_meter = 1  # Defines the precision of the returned image
+        self.x_range_grid = x_range * self.grid_per_meter  # symmetrically for front and back
+        self.y_range_grid = y_range * self.grid_per_meter  # symmetrically for left and right
+
         if self.type_os == "image":
-            self.grid_per_meter = 1  # Defines the precision of the returned image
-            self.x_range_grid = x_range * self.grid_per_meter  # symmetrically for front and back
-            self.y_range_grid = y_range * self.grid_per_meter  # symmetrically for left and right
             self.observation_space = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
             if self.flatten:
                 self.observation_space = gym.spaces.Discrete(self.observation_space.flatten().shape[0])
             # Assigning the environment call
             self.get_environment = self._calculate_image_environment
 
-        # elif type_os == "structured": todo: create discrete observation space
+        elif self.type_os == "structured":
+            self.observation_space = gym.spaces.Discrete(18)
+            # Assigning the environment call
+            self.get_environment = self._calculate_structured_environment
+
         else:
             raise RuntimeError("This type of observation space is not yet implemented.")
 
@@ -729,82 +734,102 @@ class SUMOEnvironment(gym.Env):
             observation = observation.flatten()
         return observation, ego_state
 
-    def _calculate_structured_environment(self, cars_around):
+    def _calculate_structured_environment(self):
         """
         DEPRECATED
         TODO: refactor if needed
         
-        This fuction is deprecated, in the futute the implementation should be rethought based on the lateral control.
+        This function is deprecated, in the future the implementation should be rethought based on the lateral control.
         :return:
         """
-        ego_state = cars_around[self.egoID]
-        environment_state = {}
-        basic_vals = {'dx': 200, 'dv': 0}
-        basic_keys = ['FL', 'FE', 'FR', 'RL', 'RE', 'RR', 'EL', 'ER']
-        for state_key in basic_keys:
-            if state_key in ['RL', 'RE', 'RR']:
-                environment_state[state_key] = copy.copy(basic_vals)
-                environment_state[state_key]['dv'] = 0
-                environment_state[state_key]['dx'] = -200
-            elif state_key in ['EL', 'ER']:
-                environment_state[state_key] = 0
-            else:
-                environment_state[state_key] = copy.copy(basic_vals)
-        lane = {0: [], 1: [], 2: []}
-        ego_data = cars_around[self.egoID]
+        ego_state = self.env_obs.get(self.egoID, self.state)
+        if self.egoID is not None:
+            observation = {}
+            basic_vals = {'dx': 50, 'dv': 0}
+            basic_keys = ['FL', 'FE', 'FR', 'RL', 'RE', 'RR', 'EL', 'ER']
+            # Creating a dict for all the present vehicles
+            for state_key in basic_keys:
+                if state_key in ['RL', 'RE', 'RR']:
+                    observation[state_key] = copy.copy(basic_vals)
+                    observation[state_key]['dv'] = 0
+                    observation[state_key]['dx'] = -50
+                elif state_key in ['EL', 'ER']:
+                    observation[state_key] = 0
+                else:
+                    observation[state_key] = copy.copy(basic_vals)
+            lane = {0: [], 1: [], 2: []}
+            # Calculating all the vehicle data
+            for car_id in self.env_obs.keys():
+                if car_id != self.egoID:
+                    new_car = dict()
+                    new_car['dx'] = (self.env_obs[car_id]['x_position'] - self.env_obs[self.egoID]['x_position'])
+                    new_car['dy'] = (abs(self.env_obs[car_id]["y_position"] - self.env_obs[self.egoID]['y_position']))
+                    new_car['dv'] = (self.env_obs[car_id]['velocity'] - self.env_obs[self.egoID]['velocity'])
+                    new_car['l'] = (self.env_obs[car_id]["length"])
+                    lane[self.env_obs[car_id]["lane_id"]].append(new_car)
 
-        for car_id in cars_around.keys():
-            if car_id is not self.egoID:
-                new_car = dict()
-                new_car['dx'] = cars_around[car_id]['x_position'] - cars_around[self.egoID]['x_position']
-                new_car['dy'] = abs(cars_around[car_id]["y_position"] - cars_around[self.egoID]['y_position'])
-                new_car['dv'] = cars_around[car_id]['velocity'] - cars_around[self.egoID]['velocity']
-                new_car['l'] = cars_around[car_id]["length"]
-                lane[cars_around[car_id][tc.VAR_LANE_INDEX]].append(new_car)
-        [lane[i].sort(key=lambda x: x['dx']) for i in lane.keys()]
-        for lane_id in lane.keys():
-            if lane_id == ego_data['lane_id']:
-                for veh in lane[lane_id]:
-                    if veh['dx'] - veh['l'] > 0:
-                        if veh['dx'] - veh['l'] < environment_state['FE']['dx']:
-                            environment_state['FE']['dx'] = veh['dx'] - veh['l']
-                            environment_state['FE']['dv'] = veh['dv']
-                    elif veh['dx'] + ego_data["length"] < 0:
-                        if veh['dx'] + ego_data["length"] > environment_state['RE']['dx']:
-                            environment_state['RE']['dx'] = veh['dx'] + ego_data["length"]
-                            environment_state['RE']['dv'] = veh['dv']
-            elif lane_id > ego_data['lane_id']:
-                for veh in lane[lane_id]:
-                    if veh['dx'] - veh['l'] > 0:
-                        if veh['dx'] - veh['l'] < environment_state['FL']['dx']:
-                            environment_state['FL']['dx'] = veh['dx'] - veh['l']
-                            environment_state['FL']['dv'] = veh['dv']
-                    elif veh['dx'] + ego_data["length"] < 0:
-                        if veh['dx'] + ego_data["length"] > environment_state['RL']['dx']:
-                            environment_state['RL']['dx'] = veh['dx'] + ego_data["length"]
-                            environment_state['RL']['dv'] = veh['dv']
+            [lane[i].sort(key=lambda x: x['dx']) for i in lane.keys()]
+            # Going through the data and selecting the closest ones for the ego.
+            for lane_id in lane.keys():
+                if lane_id == ego_state['lane_id']:
+                    for veh in lane[lane_id]:
+                        if veh['dx'] - veh['l'] > 0:
+                            if veh['dx'] - veh['l'] < observation['FE']['dx']:
+                                observation['FE']['dx'] = veh['dx'] - veh['l']
+                                observation['FE']['dv'] = veh['dv']
+                        elif veh['dx'] + ego_state["length"] < 0:
+                            if veh['dx'] + ego_state["length"] > observation['RE']['dx']:
+                                observation['RE']['dx'] = veh['dx'] + ego_state["length"]
+                                observation['RE']['dv'] = veh['dv']
+                elif lane_id > ego_state['lane_id']:
+                    for veh in lane[lane_id]:
+                        if veh['dx'] - veh['l'] > 0:
+                            if veh['dx'] - veh['l'] < observation['FL']['dx']:
+                                observation['FL']['dx'] = veh['dx'] - veh['l']
+                                observation['FL']['dv'] = veh['dv']
+                        elif veh['dx'] + ego_state["length"] < 0:
+                            if veh['dx'] + ego_state["length"] > observation['RL']['dx']:
+                                observation['RL']['dx'] = veh['dx'] + ego_state["length"]
+                                observation['RL']['dv'] = veh['dv']
+                        else:
+                            observation['EL'] = 1
+
+                elif lane_id < ego_state["lane_id"]:
+                    for veh in lane[lane_id]:
+                        if veh['dx'] - veh['l'] > 0:
+                            if veh['dx'] - veh['l'] < observation['FR']['dx']:
+                                observation['FR']['dx'] = veh['dx'] - veh['l']
+                                observation['FR']['dv'] = veh['dv']
+                        elif veh['dx'] + ego_state["length"] < 0:
+                            if veh['dx'] + ego_state["length"] > observation['RR']['dx']:
+                                observation['RR']['dx'] = veh['dx'] + ego_state["length"]
+                                observation['RR']['dv'] = veh['dv']
+                        else:
+                            observation['ER'] = 1
+
+            observation['speed'] = ego_state['velocity']
+            observation['lane_id'] = ego_state['lane_id']  # todo: onehot vector
+            # todo: here comes the lateral model , the lane and speed are calculated based on that also
+            #  the others like dx dy should be...
+            observation['des_speed'] = self.desired_speed
+            observation['heading'] = ego_state['heading']
+            obs_vector = []
+            for idx, value in observation.items():
+                if isinstance(value, (int,float)):
+                    if idx in ["speed", "des_speed"]:
+                        obs_vector.append(value/50)
+                    elif idx in ["lane_id"]:
+                        obs_vector.append(value/2)
                     else:
-                        environment_state['EL'] = 1
-
-            elif lane_id < ego_data["lane_id"]:
-                for veh in lane[lane_id]:
-                    if veh['dx'] - veh['l'] > 0:
-                        if veh['dx'] - veh['l'] < environment_state['FR']['dx']:
-                            environment_state['FR']['dx'] = veh['dx'] - veh['l']
-                            environment_state['FR']['dv'] = veh['dv']
-                    elif veh['dx'] + ego_data["length"] < 0:
-                        if veh['dx'] + ego_data["length"] > environment_state['RR']['dx']:
-                            environment_state['RR']['dx'] = veh['dx'] + ego_data["length"]
-                            environment_state['RR']['dv'] = veh['dv']
-                    else:
-                        environment_state['ER'] = 1
-
-        environment_state['speed'] = ego_data[tc.VAR_SPEED]
-        environment_state['lane_id'] = ego_data[tc.VAR_LANE_INDEX]  # todo: onehot vector
-        # todo: here comes the lateral model , the lane and speed are calculated based on that also
-        #  the others like dx dy should be...
-        environment_state['des_speed'] = self.desired_speed
-        return environment_state, ego_state
+                        obs_vector.append(value)
+                elif isinstance(value, dict):
+                    for iddx, item in value.items():
+                        obs_vector.append(item/50)
+        else:
+            obs_vector = [0]*18
+        observation_vector = np.asarray(obs_vector, dtype=np.float32)
+        assert max(observation_vector) <= 1.0 and min(observation_vector) >= -1
+        return observation_vector, ego_state
 
     def calculate_good_objects_based_on_policy(self, policy):
         return self.get_max_reward(policy)
