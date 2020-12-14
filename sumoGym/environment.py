@@ -374,7 +374,7 @@ class SUMOEnvironment(gym.Env):
         # Selecting action to do
         steering_angle, velocity_dif = self.calculate_action(action)
         # setting speed for the vehicle
-        traci.vehicle.setSpeed(self.egoID, self.state['velocity'] + velocity_dif)
+        traci.vehicle.setSpeed(self.egoID, min(self.state['velocity'] + velocity_dif, 50))
         if steering_angle != 0:
             self.lanechange_counter +=1
             lane = traci.vehicle.getLaneIndex(self.egoID)
@@ -466,7 +466,7 @@ class SUMOEnvironment(gym.Env):
             self.egoID = None
             self.observation *= 0
 
-        elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (50 / 3.6):
+        elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (60 / 3.6):
             cause = 'slow' if self.reward_dict['slow'][0] else None
             temp_reward['slow'] = self.reward_dict[cause][1]
             terminated = True
@@ -525,7 +525,7 @@ class SUMOEnvironment(gym.Env):
                 for carID in IDsOfVehicles:
                     # todo: this search only works in the straight simulation
                     if traci.vehicle.getPosition(carID)[0] < self.ego_start_position and \
-                            traci.vehicle.getSpeed(carID) > (60 / 3.6):
+                            traci.vehicle.getSpeed(carID) > (40 / 3.6):
                         # Saving ID and start position for ego vehicle
                         self.egoID = carID
                         self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
@@ -589,7 +589,7 @@ class SUMOEnvironment(gym.Env):
         Function to set random speed of ego(s)
         """
         # TODO: make this work for more ego
-        self.desired_speed = random.randint(130, 160) / 3.6
+        self.desired_speed = random.randint(80, 130) / 3.6
 
     def _calculate_discrete_action(self, action):
         """
@@ -828,7 +828,8 @@ class SUMOEnvironment(gym.Env):
         else:
             obs_vector = [0]*18
         observation_vector = np.asarray(obs_vector, dtype=np.float32)
-        assert max(observation_vector) <= 1.0 and min(observation_vector) >= -1
+        assert max(observation_vector) <= 1.0 and min(observation_vector) >= -1, \
+            f"the observationvector is {observation_vector}"
         return observation_vector, ego_state
 
     def calculate_good_objects_based_on_policy(self, policy):
