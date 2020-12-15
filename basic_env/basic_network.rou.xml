@@ -18,7 +18,7 @@
 
     <vTypeDistribution id="typedist1" vTypes="car1 car2 car3 car4 car5"/>
 
-    <flow id="carflow1" type="typedist1" route="r1" beg="0" end="3600" departLane="random" arrivalPos="max" vehsPerHour="2400"/>
+    <flow id="carflow1" type="typedist1" route="r1" beg="0" end="3600" departLane="random" arrivalPos="max" vehsPerHour="3600"/>
 </routes>
 
 

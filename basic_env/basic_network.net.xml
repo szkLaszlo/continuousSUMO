@@ -27,20 +27,20 @@
     <location netOffset="0.00,0.00" convBoundary="0.00,0.00,200.00,0.00" origBoundary="10000000000.00,10000000000.00,-10000000000.00,-10000000000.00" projParameter="!"/>
 
     <edge id=":B_0" function="internal">
-        <lane id=":B_0_0" index="0" speed="13.89" length="0.01" shape="100.00,-8.00 100.00,-8.00"/>
-        <lane id=":B_0_1" index="1" speed="13.89" length="0.01" shape="100.00,-4.80 100.00,-4.80"/>
-        <lane id=":B_0_2" index="2" speed="13.89" length="0.01" shape="100.00,-1.60 100.00,-1.60"/>
+        <lane id=":B_0_0" index="0" speed="25.00" length="0.01" shape="100.00,-8.00 100.00,-8.00"/>
+        <lane id=":B_0_1" index="1" speed="25.00" length="0.01" shape="100.00,-4.80 100.00,-4.80"/>
+        <lane id=":B_0_2" index="2" speed="25.00" length="0.01" shape="100.00,-1.60 100.00,-1.60"/>
     </edge>
 
     <edge id="a" from="A" to="B" priority="-1">
-        <lane id="a_0" index="0" speed="13.89" length="100.00" shape="0.00,-8.00 100.00,-8.00"/>
-        <lane id="a_1" index="1" speed="13.89" length="100.00" shape="0.00,-4.80 100.00,-4.80"/>
-        <lane id="a_2" index="2" speed="13.89" length="100.00" shape="0.00,-1.60 100.00,-1.60"/>
+        <lane id="a_0" index="0" speed="20.00" length="100.00" shape="0.00,-8.00 100.00,-8.00"/>
+        <lane id="a_1" index="1" speed="21.00" length="100.00" shape="0.00,-4.80 100.00,-4.80"/>
+        <lane id="a_2" index="2" speed="22.00" length="100.00" shape="0.00,-1.60 100.00,-1.60"/>
     </edge>
     <edge id="b" from="B" to="C" priority="-1">
-        <lane id="b_0" index="0" speed="13.89" length="100.00" shape="100.00,-8.00 200.00,-8.00"/>
-        <lane id="b_1" index="1" speed="13.89" length="100.00" shape="100.00,-4.80 200.00,-4.80"/>
-        <lane id="b_2" index="2" speed="13.89" length="100.00" shape="100.00,-1.60 200.00,-1.60"/>
+        <lane id="b_0" index="0" speed="20.00" length="100.00" shape="100.00,-8.00 200.00,-8.00"/>
+        <lane id="b_1" index="1" speed="22.00" length="100.00" shape="100.00,-4.80 200.00,-4.80"/>
+        <lane id="b_2" index="2" speed="23.00" length="100.00" shape="100.00,-1.60 200.00,-1.60"/>
     </edge>
 
     <junction id="A" type="dead_end" x="0.00" y="0.00" incLanes="" intLanes="" shape="0.00,0.00 0.00,-9.60"/>

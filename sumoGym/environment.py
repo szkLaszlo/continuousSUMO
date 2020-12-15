@@ -263,6 +263,14 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0.0, False],
                                 'lane_change': [False, 1.0, False],
                                 'type': reward_type}
+        elif reward_type == "positive":
+            self.reward_dict = {'collision': [True, 1.0, True],
+                                'slow': [True, 1.0, True],
+                                'left_highway': [True, 1.0, True],
+                                'immediate': [False, 1.0, True],
+                                'success': [True, 0.0, False],
+                                'lane_change': [False, 1.0, True],
+                                'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
 
@@ -274,6 +282,9 @@ class SUMOEnvironment(gym.Env):
         if self.reward_dict["type"] == "basic":
             reward = self.reward_dict['immediate'][1]
         elif self.reward_dict["type"] == 'speed':
+            reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
+                     / self.desired_speed
+        elif self.reward_dict["type"] == 'positive':
             reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
                      / self.desired_speed
         else:
@@ -485,7 +496,7 @@ class SUMOEnvironment(gym.Env):
         temp_reward["immediate"] = self._calculate_immediate_reward()
 
         if is_lane_change:
-            temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
+            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] #if cause not in ["left_highway", "collision"] else 0
 
         reward = self.get_max_reward(temp_reward)
 
@@ -589,7 +600,7 @@ class SUMOEnvironment(gym.Env):
         Function to set random speed of ego(s)
         """
         # TODO: make this work for more ego
-        self.desired_speed = random.randint(80, 130) / 3.6
+        self.desired_speed = random.randint(100, 130) / 3.6
 
     def _calculate_discrete_action(self, action):
         """
@@ -844,7 +855,7 @@ class SUMOEnvironment(gym.Env):
                 elif isinstance(value, (int, float)) and self.reward_dict[idx][2]:
                     reward.append(value)
 
-        elif isinstance(temp_reward, np.ndarray):
+        elif isinstance(temp_reward, (np.ndarray, int)):
             reward = []
             for idx, value in self.reward_dict.items():
                 if isinstance(value, list) and value[2]:
