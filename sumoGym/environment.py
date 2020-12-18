@@ -68,6 +68,7 @@ class SUMOEnvironment(gym.Env):
                  change_speed_interval=100):
 
         super(SUMOEnvironment, self).__init__()
+        self.name = "SuMoGyM"
         np.random.seed(42)
         if radar_range is None:
             radar_range = [50, 9] # x and y
@@ -85,7 +86,7 @@ class SUMOEnvironment(gym.Env):
         self._setup_observation_space(*radar_range)
         self._setup_action_space()
         self._setup_reward_system(reward_type=reward_type)
-        self.max_num_steps = 70
+        self.max_num_steps = 2
         self.rendering = True if mode == 'human' else False
 
         # Simulation data and constants
@@ -98,6 +99,7 @@ class SUMOEnvironment(gym.Env):
             os.makedirs(self.save_log_path)
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
+        self.default_w = self.get_max_reward(1)
         # self.log = StdOut()
         # self.serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # self.serv.bind(('0.0.0.0', 11223))
@@ -224,7 +226,7 @@ class SUMOEnvironment(gym.Env):
             self.calculate_action = self._calculate_continuous_action
             self.model_step = self._continuous_step
 
-        elif self.type_as == "discrete":
+        elif "discrete" in self.type_as:
             # todo: hardcoded steering and speed
             self.steering_constant = [-1, 0, 1]  # [right, nothing, left] change in radian
             self.accel_constant = [-0.5, 0.0, 0.3]  # are in m/s
@@ -271,6 +273,22 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0.0, False],
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
+        elif reward_type == "negative":
+            self.reward_dict = {'collision': [True, -10.0, True],
+                                'slow': [True, -10.0, True],
+                                'left_highway': [True, -10.0, True],
+                                'immediate': [False, 1.0, True],
+                                'success': [True, 0.0, False],
+                                'lane_change': [False, 1.0, True],
+                                'type': reward_type}
+        elif reward_type == "terminal":
+            self.reward_dict = {'collision': [True, -1.0, True],
+                                'slow': [True, -1.0, True],
+                                'left_highway': [True, -1.0, True],
+                                'immediate': [False, 1.0, False],
+                                'success': [True, 0.0, False],
+                                'lane_change': [False, 1.0, False],
+                                'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
 
@@ -281,10 +299,8 @@ class SUMOEnvironment(gym.Env):
         """
         if self.reward_dict["type"] == "basic":
             reward = self.reward_dict['immediate'][1]
-        elif self.reward_dict["type"] == 'speed':
-            reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
-                     / self.desired_speed
-        elif self.reward_dict["type"] == 'positive':
+
+        elif self.reward_dict["type"] in ['negative', 'speed', 'positive', 'terminal']:
             reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
                      / self.desired_speed
         else:
