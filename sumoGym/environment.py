@@ -546,10 +546,12 @@ class SUMOEnvironment(gym.Env):
                             traci.vehicle.getSpeed(carID) > (62 / 3.6):
                         # Saving ID and start position for ego vehicle
                         self.egoID = carID
-                        self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
+                        self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0] - traci.vehicle.getLength(
+                            self.egoID) / 2
                 if self.egoID is None:
                     self.egoID = IDsOfVehicles[-1]
-                    self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0]
+                    self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0] - traci.vehicle.getLength(
+                        self.egoID) / 2
 
                 # Setting ego simulation variables to be controlled by us (not SUMO)
                 traci.vehicle.setLaneChangeMode(self.egoID, 0x0)
@@ -822,6 +824,11 @@ class SUMOEnvironment(gym.Env):
                                 observation['RR']['dv'] = veh['dv']
                         else:
                             observation['ER'] = 1
+
+            if ego_state['lane_id'] == 0:
+                observation['ER'] = 1
+            elif ego_state['lane_id'] == 2:
+                observation['EL'] = 1
 
             observation['speed'] = ego_state['velocity']
             observation['lane_id'] = ego_state['lane_id']  # todo: onehot vector
