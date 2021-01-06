@@ -251,12 +251,12 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0],
                                 'type': reward_type}
         elif reward_type == 'speed':
-            self.reward_dict = {'collision': [True, -1.0, True],
-                                'slow': [True, -1.0, True],
-                                'left_highway': [True, -1.0, True],
+            self.reward_dict = {'success': [True, 1.0, True],
+                                'collision': [True, -10.0, False],
+                                'slow': [True, -10.0, False],
+                                'left_highway': [True, -10.0, False],
                                 'immediate': [False, 1.0, True],
-                                'success': [True, 0.0, False],
-                                'lane_change': [False, 1.0, False],
+                                'lane_change': [False, 1.0, True],
                                 'type': reward_type}
         elif reward_type == "positive":
             self.reward_dict = {'collision': [True, 1.0, True],
@@ -461,7 +461,7 @@ class SUMOEnvironment(gym.Env):
 
         if left_:
             cause = "left_highway"
-            temp_reward['left_highway'] = self.reward_dict['left_highway'][1]
+            temp_reward['success'] = self.reward_dict['left_highway'][1]
             terminated = True
             self.egoID = None
             self.observation *= 0
@@ -476,7 +476,7 @@ class SUMOEnvironment(gym.Env):
             self.observation *= 0
 
         elif self.egoID in traci.simulation.getCollidingVehiclesIDList():  # or self._check_collision( environment_collection):
-            temp_reward['collision'] = self.reward_dict['collision'][1]
+            temp_reward['success'] = self.reward_dict['collision'][1]
             cause = "collision"
             terminated = True
             self.egoID = None
@@ -484,7 +484,7 @@ class SUMOEnvironment(gym.Env):
 
         elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (60 / 3.6):
             cause = 'slow' if self.reward_dict['slow'][0] else None
-            temp_reward['slow'] = self.reward_dict[cause][1]
+            temp_reward['success'] = self.reward_dict[cause][1]
             terminated = True
             self.egoID = None
             self.observation *= 0
