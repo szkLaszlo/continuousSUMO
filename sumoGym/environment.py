@@ -28,7 +28,8 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                           reward_type='speed',
                           mode='none',
                           save_log_path=None,
-                          change_speed_interval=100):
+                          change_speed_interval=100,
+                          seed=None):
     """
     This function creates the gym environment. It is used for initiating the continuousSUMO package.
     """
@@ -43,7 +44,8 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                     reward_type=reward_type,
                     mode=mode,
                     save_log_path=save_log_path,
-                    change_speed_interval=change_speed_interval)
+                    change_speed_interval=change_speed_interval,
+                    seed=seed)
 
 
 class SUMOEnvironment(gym.Env):
@@ -60,11 +62,13 @@ class SUMOEnvironment(gym.Env):
                  radar_range=None,
                  flatten=True,
                  save_log_path=None,
-                 change_speed_interval=100):
+                 change_speed_interval=100,
+                 seed=None):
 
         super(SUMOEnvironment, self).__init__()
         self.name = "SuMoGyM"
-        np.random.seed(42)
+        np.random.seed(seed if seed is not None else 42)
+        self.seed = seed
         if radar_range is None:
             radar_range = [50, 9]  # x and y
         self.radar_range = radar_range
@@ -94,10 +98,7 @@ class SUMOEnvironment(gym.Env):
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
         self.default_w = self.get_max_reward(1)
-        # self.log = StdOut()
-        # self.serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.serv.bind(('0.0.0.0', 11223))
-        # self.serv.listen(5)
+
         self.start()
         self.reset()
 
@@ -125,14 +126,18 @@ class SUMOEnvironment(gym.Env):
                         "--collision.mingap-factor", "0",
                         "--collision.action", "remove",
                         "--no-warnings", "1",
-                        "--random",
-                        "--full-output", f"{self.save_log_path}/log.txt",
+                        #"--full-output", f"{self.save_log_path}/log.txt",
                         # "--seed", "42",
                         # "--log", "stdout.txt",
                         # "--step-log.period", "1",
                         # "--error-log", "errors.txt",
                         # "--duration-log.statistics"
                         ]
+        if self.seed is None:
+            self.sumoCmd.append("--random")
+        else:
+            self.sumoCmd.append("--seed")
+            self.sumoCmd.append(f"{self.seed}")
 
         traci.start(self.sumoCmd[:4])
 
@@ -723,7 +728,7 @@ class SUMOEnvironment(gym.Env):
                 # Drawing speed of the current car
                 velocity = self.env_obs[car_id]['velocity'] / 50
                 if self.egoID == car_id:
-                    velocity = 1-(self.env_obs[car_id]['velocity']-self.desired_speed)/50
+                    velocity = 1-abs(self.env_obs[car_id]['velocity']-self.desired_speed)/self.desired_speed
                 observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
@@ -736,7 +741,7 @@ class SUMOEnvironment(gym.Env):
                     observation[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * lane_id
                 # Drawing heading of the car
-                heading = np.radians(self.env_obs[car_id]["heading"]) / 2 / np.pi
+                heading = np.radians(self.env_obs[car_id]["heading"]) / np.pi
                 observation[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
