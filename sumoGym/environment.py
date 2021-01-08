@@ -256,11 +256,27 @@ class SUMOEnvironment(gym.Env):
                                 'success': [True, 0],
                                 'type': reward_type}
         elif reward_type == 'speed':
-            self.reward_dict = {'success': [True, 1.0, True],
+            self.reward_dict = {'success': [True, 0.0, True],
                                 'collision': [True, -10.0, False],
                                 'slow': [True, -10.0, False],
                                 'left_highway': [True, -10.0, False],
                                 'immediate': [False, 1.0, True],
+                                'lane_change': [False, 1.0, True],
+                                'type': reward_type}
+        elif reward_type == 'longitudinal':
+            self.reward_dict = {'success': [True, 0.0, True],
+                                'collision': [True, -10.0, False],
+                                'slow': [True, -10.0, False],
+                                'left_highway': [True, -10.0, False],
+                                'immediate': [False, 1.0, True],
+                                'lane_change': [False, 1.0, False],
+                                'type': reward_type}
+        elif reward_type == 'lateral':
+            self.reward_dict = {'success': [True, 0.0, True],
+                                'collision': [True, -1.0, False],
+                                'slow': [True, -1.0, False],
+                                'left_highway': [True, -1.0, False],
+                                'immediate': [False, 1.0, False],
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
         elif reward_type == "positive":
@@ -298,9 +314,11 @@ class SUMOEnvironment(gym.Env):
         if self.reward_dict["type"] == "basic":
             reward = self.reward_dict['immediate'][1]
 
-        elif self.reward_dict["type"] in ['negative', 'speed', 'positive', 'terminal']:
+        elif self.reward_dict["type"] in ['negative', 'speed', 'positive', 'terminal', "longitudinal"]:
             reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
                      / self.desired_speed
+        elif self.reward_dict["type"] in ['lateral']:
+            reward = 0
         else:
             raise RuntimeError('Reward type is not implemented')
 
