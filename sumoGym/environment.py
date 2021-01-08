@@ -722,6 +722,8 @@ class SUMOEnvironment(gym.Env):
 
                 # Drawing speed of the current car
                 velocity = self.env_obs[car_id]['velocity'] / 50
+                if self.egoID == car_id:
+                    velocity = 1-(self.env_obs[car_id]['velocity']-self.desired_speed)/50
                 observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
