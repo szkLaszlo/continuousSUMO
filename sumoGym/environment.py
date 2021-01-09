@@ -520,12 +520,11 @@ class SUMOEnvironment(gym.Env):
                 self.env_obs[self.egoID] = copy.deepcopy(self.state)
             self.steps_done += 1
             self._refresh_environment()
+
         # getting immediate reward
-        temp_reward["immediate"] = self._calculate_immediate_reward()
+        temp_reward["immediate"] = self._calculate_immediate_reward() if cause is None else 0
         # getting lane change reward.
-        if is_lane_change:
-            temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
-            # if cause not in ["left_highway", "collision"] else 0
+        temp_reward["lane_change"] = self.reward_dict["lane_change"][1] if is_lane_change and cause not in ["left_highway", "collision"] else 0
         # constructing the reward vector
         reward = self.get_max_reward(temp_reward)
 
