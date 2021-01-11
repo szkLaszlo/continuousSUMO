@@ -133,11 +133,9 @@ class SUMOEnvironment(gym.Env):
                         # "--error-log", "errors.txt",
                         # "--duration-log.statistics"
                         ]
-        if self.seed is None:
-            self.sumoCmd.append("--random")
-        else:
-            self.sumoCmd.append("--seed")
-            self.sumoCmd.append(f"{self.seed}")
+
+        self.sumoCmd.append("--seed")
+        self.sumoCmd.append(str(int(np.random.randint(0, 1000000))) if self.seed is None else self.seed)
 
         traci.start(self.sumoCmd[:4])
 
@@ -164,6 +162,8 @@ class SUMOEnvironment(gym.Env):
         """
         # Changing configuration
         self._choose_random_simulation()
+        if self.seed is None:
+            self.update_seed()
         # Loads traci configuration
         traci.load(self.sumoCmd[1:])
         # Resetting configuration
@@ -185,6 +185,14 @@ class SUMOEnvironment(gym.Env):
             )
 
         return self.observation
+
+    def update_seed(self):
+        """
+
+        :return:
+        """
+        index = self.sumoCmd.index("--seed")
+        self.sumoCmd[index+1] = str(int(np.random.randint(0, 1000000)))
 
     def _setup_observation_space(self, x_range=50, y_range=9):
         """
@@ -591,10 +599,22 @@ class SUMOEnvironment(gym.Env):
                                                varIDs=[tc.VAR_SPEED, tc.VAR_LANE_INDEX, tc.VAR_ANGLE, tc.VAR_POSITION,
                                                        tc.VAR_LENGTH, tc.VAR_WIDTH])
                 traci.junction.subscribeContext("C", tc.CMD_GET_VEHICLE_VARIABLE, dist=50)
+                self.free_ego_surroundings(IDsOfVehicles=IDsOfVehicles)
                 if self.rendering:
                     traci.gui.trackVehicle('View #0', self.egoID)
         else:
             traci.simulationStep()
+
+    def free_ego_surroundings(self, IDsOfVehicles):
+        # Finding the last car on the highway
+        for carID in IDsOfVehicles:
+            if carID == self.egoID:
+                continue
+            distance = np.sqrt((traci.vehicle.getPosition(carID)[0]-traci.vehicle.getPosition(self.egoID)[0])**2\
+                       + (traci.vehicle.getPosition(carID)[1]-traci.vehicle.getPosition(self.egoID)[1])**2)
+
+            if distance < 10:
+                traci.vehicle.remove(carID)
 
     def _choose_random_simulation(self):
         """
