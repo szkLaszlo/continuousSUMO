@@ -25,7 +25,7 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                           simulation_directory=None,
                           type_os="image",
                           type_as="discrete",
-                          reward_type='speed',
+                          reward_type='all',
                           mode='none',
                           save_log_path=None,
                           change_speed_interval=100,
@@ -57,7 +57,7 @@ class SUMOEnvironment(gym.Env):
                  simulation_directory='../sim_conf',
                  type_os="image",
                  type_as="discrete",
-                 reward_type='speed',
+                 reward_type='all',
                  mode='none',
                  radar_range=None,
                  flatten=True,
@@ -263,7 +263,7 @@ class SUMOEnvironment(gym.Env):
                                 'immediate': [False, 1],
                                 'success': [True, 0],
                                 'type': reward_type}
-        elif reward_type == 'speed':
+        elif reward_type == 'all':
             self.reward_dict = {'success': [True, 0.0, True],
                                 'collision': [True, -10.0, False],
                                 'slow': [True, -10.0, False],
@@ -304,12 +304,28 @@ class SUMOEnvironment(gym.Env):
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
         elif reward_type == "terminal":
-            self.reward_dict = {'collision': [True, -1.0, True],
-                                'slow': [True, -1.0, True],
-                                'left_highway': [True, -1.0, True],
+            self.reward_dict = {'success': [True, 0.0, True],
+                                'collision': [True, -10.0, False],
+                                'slow': [True, -10.0, False],
+                                'left_highway': [True, -10.0, False],
                                 'immediate': [False, 1.0, False],
-                                'success': [True, 0.0, False],
                                 'lane_change': [False, 1.0, False],
+                                'type': reward_type}
+        elif reward_type == "terminal_speed":
+            self.reward_dict = {'success': [True, 0.0, True],
+                                'collision': [True, -10.0, False],
+                                'slow': [True, -10.0, False],
+                                'left_highway': [True, -10.0, False],
+                                'immediate': [False, 1.0, True],
+                                'lane_change': [False, 1.0, False],
+                                'type': reward_type}
+        elif reward_type == "terminal_lane":
+            self.reward_dict = {'success': [True, 0.0, True],
+                                'collision': [True, -10.0, False],
+                                'slow': [True, -10.0, False],
+                                'left_highway': [True, -10.0, False],
+                                'immediate': [False, 1.0, False],
+                                'lane_change': [False, 1.0, True],
                                 'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
@@ -322,10 +338,10 @@ class SUMOEnvironment(gym.Env):
         if self.reward_dict["type"] == "basic":
             reward = self.reward_dict['immediate'][1]
 
-        elif self.reward_dict["type"] in ['negative', 'speed', 'positive', 'terminal', "longitudinal"]:
+        elif self.reward_dict["type"] in ['negative', 'all', 'positive', 'terminal_speed', "longitudinal"]:
             reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
                      / self.desired_speed
-        elif self.reward_dict["type"] in ['lateral']:
+        elif self.reward_dict["type"] in ['lateral', "terminal", "terminal_lane"]:
             reward = 0
         else:
             raise RuntimeError('Reward type is not implemented')
