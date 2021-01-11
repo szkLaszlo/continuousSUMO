@@ -852,7 +852,7 @@ class SUMOEnvironment(gym.Env):
 
                 if lane_id == ego_state['lane_id']:
                     for veh in lane[lane_id]:
-                        common_length = (veh['l'] + ego_state["length"])
+                        common_length = (veh['l'] + ego_state["length"])/2
                         if veh['dx'] - common_length > 0:
                             if veh['dx'] - common_length < observation['FE']['dx']:
                                 observation['FE']['dx'] = veh['dx'] - common_length
@@ -863,7 +863,7 @@ class SUMOEnvironment(gym.Env):
                                 observation['RE']['dv'] = veh['dv']
                 elif lane_id > ego_state['lane_id']:
                     for veh in lane[lane_id]:
-                        common_length = (veh['l'] + ego_state["length"])
+                        common_length = (veh['l'] + ego_state["length"])/2
                         if veh['dx'] - common_length > 0:
                             if veh['dx'] - common_length < observation['FL']['dx']:
                                 observation['FL']['dx'] = veh['dx'] - common_length
@@ -877,8 +877,8 @@ class SUMOEnvironment(gym.Env):
 
                 elif lane_id < ego_state["lane_id"]:
                     for veh in lane[lane_id]:
-                        common_length = (veh['l'] + ego_state["length"])
-                        if veh['dx'] - veh['l'] > 0:
+                        common_length = (veh['l'] + ego_state["length"])/2
+                        if veh['dx'] - common_length > 0:
                             if veh['dx'] - common_length < observation['FR']['dx']:
                                 observation['FR']['dx'] = veh['dx'] - common_length
                                 observation['FR']['dv'] = veh['dv']
