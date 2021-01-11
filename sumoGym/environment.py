@@ -833,38 +833,42 @@ class SUMOEnvironment(gym.Env):
             [lane[i].sort(key=lambda x: x['dx']) for i in lane.keys()]
             # Going through the data and selecting the closest ones for the ego.
             for lane_id in lane.keys():
+
                 if lane_id == ego_state['lane_id']:
                     for veh in lane[lane_id]:
-                        if veh['dx'] - veh['l'] > 0:
-                            if veh['dx'] - veh['l'] < observation['FE']['dx']:
-                                observation['FE']['dx'] = veh['dx'] - veh['l']
+                        common_length = (veh['l'] + ego_state["length"])
+                        if veh['dx'] - common_length > 0:
+                            if veh['dx'] - common_length < observation['FE']['dx']:
+                                observation['FE']['dx'] = veh['dx'] - common_length
                                 observation['FE']['dv'] = veh['dv']
-                        elif veh['dx'] + ego_state["length"] < 0:
-                            if veh['dx'] + ego_state["length"] > observation['RE']['dx']:
-                                observation['RE']['dx'] = veh['dx'] + ego_state["length"]
+                        elif veh['dx'] + common_length < 0:
+                            if veh['dx'] + common_length > observation['RE']['dx']:
+                                observation['RE']['dx'] = veh['dx'] + common_length
                                 observation['RE']['dv'] = veh['dv']
                 elif lane_id > ego_state['lane_id']:
                     for veh in lane[lane_id]:
-                        if veh['dx'] - veh['l'] > 2:
-                            if veh['dx'] - veh['l'] < observation['FL']['dx']:
-                                observation['FL']['dx'] = veh['dx'] - veh['l']
+                        common_length = (veh['l'] + ego_state["length"])
+                        if veh['dx'] - common_length > 0:
+                            if veh['dx'] - common_length < observation['FL']['dx']:
+                                observation['FL']['dx'] = veh['dx'] - common_length
                                 observation['FL']['dv'] = veh['dv']
-                        elif veh['dx'] + ego_state["length"] < -2:
-                            if veh['dx'] + ego_state["length"] > observation['RL']['dx']:
-                                observation['RL']['dx'] = veh['dx'] + ego_state["length"]
+                        elif veh['dx'] + common_length < 0:
+                            if veh['dx'] + common_length > observation['RL']['dx']:
+                                observation['RL']['dx'] = veh['dx'] + common_length
                                 observation['RL']['dv'] = veh['dv']
                         else:
                             observation['EL'] = 1
 
                 elif lane_id < ego_state["lane_id"]:
                     for veh in lane[lane_id]:
-                        if veh['dx'] - veh['l'] > 2:
-                            if veh['dx'] - veh['l'] < observation['FR']['dx']:
-                                observation['FR']['dx'] = veh['dx'] - veh['l']
+                        common_length = (veh['l'] + ego_state["length"])
+                        if veh['dx'] - veh['l'] > 0:
+                            if veh['dx'] - common_length < observation['FR']['dx']:
+                                observation['FR']['dx'] = veh['dx'] - common_length
                                 observation['FR']['dv'] = veh['dv']
-                        elif veh['dx'] + ego_state["length"] < -2:
-                            if veh['dx'] + ego_state["length"] > observation['RR']['dx']:
-                                observation['RR']['dx'] = veh['dx'] + ego_state["length"]
+                        elif veh['dx'] + common_length < 0:
+                            if veh['dx'] + common_length > observation['RR']['dx']:
+                                observation['RR']['dx'] = veh['dx'] + common_length
                                 observation['RR']['dv'] = veh['dv']
                         else:
                             observation['ER'] = 1
