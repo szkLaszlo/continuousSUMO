@@ -135,7 +135,7 @@ class SUMOEnvironment(gym.Env):
                         ]
 
         self.sumoCmd.append("--seed")
-        self.sumoCmd.append(str(int(np.random.randint(0, 1000000))) if self.seed is None else self.seed)
+        self.sumoCmd.append(str(int(np.random.randint(0, 1000000))) if self.seed is None else f"{self.seed}")
 
         traci.start(self.sumoCmd[:4])
 
@@ -205,7 +205,7 @@ class SUMOEnvironment(gym.Env):
         self.y_range_grid = y_range * self.grid_per_meter  # symmetrically for left and right
 
         if self.type_os == "image":
-            self.observation_space = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
+            self.observation_space = np.zeros((3, 2 * self.y_range_grid, 2 * self.x_range_grid))
             if self.flatten:
                 self.observation_space = gym.spaces.Discrete(self.observation_space.flatten().shape[0])
             # Assigning the environment call
@@ -265,9 +265,9 @@ class SUMOEnvironment(gym.Env):
                                 'type': reward_type}
         elif reward_type == 'all':
             self.reward_dict = {'success': [True, 0.0, True],
-                                'collision': [True, -10.0, False],
-                                'slow': [True, -10.0, False],
-                                'left_highway': [True, -10.0, False],
+                                'collision': [True, -100.0, False],
+                                'slow': [True, -100.0, False],
+                                'left_highway': [True, -100.0, False],
                                 'immediate': [False, 1.0, True],
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
@@ -379,12 +379,12 @@ class SUMOEnvironment(gym.Env):
 
         if self.render_mode == 'human':
             img, _ = self._calculate_image_environment(False)
-            img = img.transpose((1, 2, 0))[:, :, :-1]
+            img = img.transpose((1, 2, 0))
             if self.save_path is not None:
                 dir_name = os.path.split(self.save_path)[0]
                 if not os.path.exists(dir_name):
                     os.makedirs(dir_name)
-                im = np.zeros((500, 90, 3))
+                im = np.zeros((90, 500, 3))
                 scale_x = int(np.ceil(im.shape[0] // img.shape[0]))
                 scale_y = int(np.ceil(im.shape[1] // img.shape[1]))
                 for k in range(0, im.shape[0], scale_x):
@@ -765,7 +765,7 @@ class SUMOEnvironment(gym.Env):
         ego_state = self.env_obs.get(self.egoID, self.state)
 
         # Creating state representation as a matrix (image)
-        observation = np.zeros((4, 2 * self.x_range_grid, 2 * self.y_range_grid))
+        observation = np.zeros((3, 2 * self.x_range_grid, 2 * self.y_range_grid))
         # Drawing the image channels with actual data
         for car_id in self.env_obs.keys():
             dx = int(np.rint((self.env_obs[car_id]['x_position'] - ego_state["x_position"]) * self.grid_per_meter))
@@ -794,19 +794,21 @@ class SUMOEnvironment(gym.Env):
                     observation[1, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * lane_id
                 # Drawing heading of the car
-                heading = np.radians(self.env_obs[car_id]["heading"]) / np.pi
+                heading = (np.pi/2-np.radians(self.env_obs[car_id]["heading"])) / np.pi
                 observation[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[2, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                     self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * heading
 
-                # If ego, drawing the desired speed
-                if car_id == self.egoID:
-                    observation[3, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
-                    self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
-                        observation[3, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
-                        self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * self.desired_speed / 50
+                # # If ego, drawing the desired speed
+                # if car_id == self.egoID:
+                #     observation[3, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                #     self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
+                #         observation[3, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
+                #         self.y_range_grid + dy - w:self.y_range_grid + dy + w]) * self.desired_speed / 50
 
+        # Channel x width (y) x heigth (x) because it is an image.
+        observation = observation.transpose((0,2,1))
         # plt.imshow(observation.transpose((1, 2, 0))[:, :, :3])
         # plt.show()
         # if we want to flatten the output, due to network feed.
@@ -861,7 +863,7 @@ class SUMOEnvironment(gym.Env):
                             if veh['dx'] + common_length > observation['RE']['dx']:
                                 observation['RE']['dx'] = veh['dx'] + common_length
                                 observation['RE']['dv'] = veh['dv']
-                elif lane_id > ego_state['lane_id']:
+                elif lane_id == ego_state['lane_id']+1:
                     for veh in lane[lane_id]:
                         common_length = (veh['l'] + ego_state["length"])/2
                         if veh['dx'] - common_length > 0:
@@ -875,7 +877,7 @@ class SUMOEnvironment(gym.Env):
                         else:
                             observation['EL'] = 1
 
-                elif lane_id < ego_state["lane_id"]:
+                elif lane_id == ego_state["lane_id"]-1:
                     for veh in lane[lane_id]:
                         common_length = (veh['l'] + ego_state["length"])/2
                         if veh['dx'] - common_length > 0:
@@ -911,6 +913,7 @@ class SUMOEnvironment(gym.Env):
                 elif isinstance(value, dict):
                     for iddx, item in value.items():
                         obs_vector.append(item / 50)
+            assert max(obs_vector)<=1 and min(obs_vector) >=-1
         else:
             obs_vector = [0] * 18
 
