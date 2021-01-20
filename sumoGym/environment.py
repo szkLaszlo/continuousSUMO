@@ -446,11 +446,13 @@ class SUMOEnvironment(gym.Env):
         # setting speed for the vehicle
         traci.vehicle.setSpeed(self.egoID, min(self.state['velocity'] + velocity_dif, 50))
         if steering_angle != 0:
-            self.lanechange_counter += 1
             lane = traci.vehicle.getLaneIndex(self.egoID)
             lane += steering_angle
-            traci.vehicle.changeLane(self.egoID, lane, self.dt)
-            return True
+            # traci.vehicle.changeLane(self.egoID, lane, self.dt)
+            if lane in [0,1,2]:
+                traci.vehicle.changeLaneRelative(self.egoID, steering_angle, self.dt)
+                self.lanechange_counter += 1
+                return True
 
         return False
 
