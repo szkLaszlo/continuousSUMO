@@ -184,7 +184,7 @@ class SUMOEnvironment(gym.Env):
                 dt=self.dt
             )
 
-        return self.observation
+        return self._get_observation()
 
     def update_seed(self):
         """
@@ -209,12 +209,12 @@ class SUMOEnvironment(gym.Env):
             if self.flatten:
                 self.observation_space = gym.spaces.Discrete(self.observation_space.flatten().shape[0])
             # Assigning the environment call
-            self.get_environment = self._calculate_image_environment
+            self._get_observation = self._convert_image_state_space_to_vector
 
         elif self.type_os == "structured":
             self.observation_space = gym.spaces.Discrete(18)
             # Assigning the environment call
-            self.get_environment = self._calculate_structured_environment
+            self._get_observation = self._convert_structural_state_space_to_vector
 
         else:
             raise RuntimeError("This type of observation space is not yet implemented.")
@@ -475,7 +475,7 @@ class SUMOEnvironment(gym.Env):
                 if "lane" in exc.args[0]:
                     cause, reward, terminated = self._get_terminating_events(True, left_=True)
                     self.render()
-                    return self.observation, sum(reward), terminated, {'cause': cause, 'cumulants': reward,
+                    return self._get_observation(), sum(reward), terminated, {'cause': cause, 'cumulants': reward,
                                                                        'velocity': self.state['velocity'],
                                                                        'distance': self.state['x_position']
                                                                                    - self.ego_start_position,
@@ -489,7 +489,7 @@ class SUMOEnvironment(gym.Env):
             # creating the images if render is true.
             self.render()
 
-            return self.observation, sum(reward), terminated, {'cause': cause, 'cumulants': reward,
+            return self._get_observation(), sum(reward), terminated, {'cause': cause, 'cumulants': reward,
                                                                'velocity': self.state['velocity'],
                                                                'distance': self.state['x_position']
                                                                            - self.ego_start_position,
@@ -513,7 +513,7 @@ class SUMOEnvironment(gym.Env):
             temp_reward['success'] = self.reward_dict['left_highway'][1]
             terminated = True
             self.egoID = None
-            self.observation *= 0
+            self.observation = None
 
         # Checking abnormal cases for ego (if events happened which terminate the simulation)
         elif self.egoID in traci.simulation.getArrivedIDList() and self.state['x_position'] >= self.end_zone - 10:
@@ -522,21 +522,21 @@ class SUMOEnvironment(gym.Env):
             temp_reward['success'] = self.reward_dict['success'][1]
             terminated = True
             self.egoID = None
-            self.observation *= 0
+            self.observation = None
 
         elif self.egoID in traci.simulation.getCollidingVehiclesIDList():  # or self._check_collision( environment_collection):
             temp_reward['success'] = self.reward_dict['collision'][1]
             cause = "collision"
             terminated = True
             self.egoID = None
-            self.observation *= 0
+            self.observation = None
 
         elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (60 / 3.6):
             cause = 'slow' if self.reward_dict['slow'][0] else None
             temp_reward['success'] = self.reward_dict[cause][1]
             terminated = True
             self.egoID = None
-            self.observation *= 0
+            self.observation = None
 
         else:
             # Case for successful step
@@ -726,7 +726,7 @@ class SUMOEnvironment(gym.Env):
         -------
 
         """
-        self.observation, self.state = self.get_environment()
+        self.observation, self.state = self._calculate_structured_environment()
 
     def _get_simulation_environment(self):
         """
@@ -817,7 +817,7 @@ class SUMOEnvironment(gym.Env):
         if flatten:
             observation = observation.flatten()
 
-        return observation, ego_state
+        return observation
 
     def _calculate_structured_environment(self):
         """
@@ -902,9 +902,23 @@ class SUMOEnvironment(gym.Env):
             observation['lane_id'] = ego_state['lane_id']  # todo: onehot vector
             observation['des_speed'] = self.desired_speed
             observation['heading'] = ego_state['heading']
-            obs_vector = []
+        else:
+            observation = None
+
+        return observation, ego_state
+
+    def _convert_image_state_space_to_vector(self):
+        if self.observation is not None:
+            return self._calculate_image_environment()
+        else:
+            return self.observation_space if not self.flatten \
+                else np.asarray([0]*self.observation_space.n, dtype=np.float32)
+
+    def _convert_structural_state_space_to_vector(self):
+        obs_vector = []
+        if self.observation is not None:
             # Normalizing the output
-            for idx, value in observation.items():
+            for idx, value in self.observation.items():
                 if isinstance(value, (int, float)):
                     if idx in ["speed", "des_speed"]:
                         obs_vector.append(value / 50)
@@ -915,16 +929,14 @@ class SUMOEnvironment(gym.Env):
                 elif isinstance(value, dict):
                     for iddx, item in value.items():
                         obs_vector.append(item / 50)
-            assert max(obs_vector)<=1 and min(obs_vector) >=-1
+            assert max(obs_vector) <= 1 and min(obs_vector) >= -1
+
         else:
             obs_vector = [0] * 18
 
-        observation_vector = np.asarray(obs_vector, dtype=np.float32)
+        obs_vector = np.asarray(obs_vector, dtype=np.float32)
 
-        assert max(observation_vector) <= 1.0 and min(observation_vector) >= -1, \
-            f"the observation vector is {observation_vector}"
-
-        return observation_vector, ego_state
+        return obs_vector
 
     def calculate_good_objects_based_on_policy(self, policy):
         return self.get_max_reward(policy)
