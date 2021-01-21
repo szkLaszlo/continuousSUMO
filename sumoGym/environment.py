@@ -378,7 +378,7 @@ class SUMOEnvironment(gym.Env):
     def render(self, mode="human"):
 
         if self.render_mode == 'human':
-            img, _ = self._calculate_image_environment(False)
+            img = self._calculate_image_environment(False)
             img = img.transpose((1, 2, 0))
             if self.save_path is not None:
                 dir_name = os.path.split(self.save_path)[0]
@@ -760,7 +760,7 @@ class SUMOEnvironment(gym.Env):
 
     def _calculate_image_environment(self, flatten=True):
         """
-        :return observation: [4, range_x, range_y]
+        :return observation: [3, range_x, range_y]
         where the last dimension is the channels of speed, lane_id, heading and desired speed
         """
 
