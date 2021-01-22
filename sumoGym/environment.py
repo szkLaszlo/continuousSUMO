@@ -265,18 +265,29 @@ class SUMOEnvironment(gym.Env):
                                 'type': reward_type}
         elif reward_type == 'all':
             self.reward_dict = {'success': [True, 0.0, True],
-                                'collision': [True, -100.0, False],
-                                'slow': [True, -100.0, False],
-                                'left_highway': [True, -100.0, False],
+                                'collision': [True, -10.0, False],
+                                'slow': [True, -5.0, False],
+                                'left_highway': [True, -10.0, False],
                                 'immediate': [False, 1.0, True],
                                 'lane_change': [False, 1.0, True],
+                                'type': reward_type}
+        elif reward_type == 'features':
+            self.reward_dict = {'success': [True, 0.0, True],
+                                'collision': [True, -1.0, False],
+                                'slow': [True, -1.0, False],
+                                'left_highway': [True, -1.0, False],
+                                'speed': [False, 1.0, True],
+                                'lane_change': [False, 1.0, True],
+                                'keep_right': [False, 1.0, True],
+                                'follow_distance': [False, -1.0, True],
+                                'cut_in_distance': [False, -1.0, True],
                                 'type': reward_type}
         elif reward_type == 'longitudinal':
             self.reward_dict = {'success': [True, 0.0, True],
                                 'collision': [True, -10.0, False],
                                 'slow': [True, -10.0, False],
                                 'left_highway': [True, -10.0, False],
-                                'immediate': [False, 1.0, True],
+                                'speed': [False, 1.0, True],
                                 'lane_change': [False, 1.0, False],
                                 'type': reward_type}
         elif reward_type == 'lateral':
@@ -284,14 +295,14 @@ class SUMOEnvironment(gym.Env):
                                 'collision': [True, -1.0, False],
                                 'slow': [True, -1.0, False],
                                 'left_highway': [True, -1.0, False],
-                                'immediate': [False, 1.0, False],
+                                'speed': [False, 1.0, False],
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
         elif reward_type == "positive":
             self.reward_dict = {'collision': [True, 1.0, True],
                                 'slow': [True, 1.0, True],
                                 'left_highway': [True, 1.0, True],
-                                'immediate': [False, 1.0, True],
+                                'speed': [False, 1.0, True],
                                 'success': [True, 0.0, False],
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
@@ -299,7 +310,7 @@ class SUMOEnvironment(gym.Env):
             self.reward_dict = {'collision': [True, -10.0, True],
                                 'slow': [True, -10.0, True],
                                 'left_highway': [True, -10.0, True],
-                                'immediate': [False, 1.0, True],
+                                'speed': [False, 1.0, True],
                                 'success': [True, 0.0, False],
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
@@ -308,7 +319,7 @@ class SUMOEnvironment(gym.Env):
                                 'collision': [True, -10.0, False],
                                 'slow': [True, -10.0, False],
                                 'left_highway': [True, -10.0, False],
-                                'immediate': [False, 1.0, False],
+                                'speed': [False, 1.0, False],
                                 'lane_change': [False, 1.0, False],
                                 'type': reward_type}
         elif reward_type == "terminal_speed":
@@ -316,7 +327,7 @@ class SUMOEnvironment(gym.Env):
                                 'collision': [True, -10.0, False],
                                 'slow': [True, -10.0, False],
                                 'left_highway': [True, -10.0, False],
-                                'immediate': [False, 1.0, True],
+                                'speed': [False, 1.0, True],
                                 'lane_change': [False, 1.0, False],
                                 'type': reward_type}
         elif reward_type == "terminal_lane":
@@ -324,22 +335,22 @@ class SUMOEnvironment(gym.Env):
                                 'collision': [True, -10.0, False],
                                 'slow': [True, -10.0, False],
                                 'left_highway': [True, -10.0, False],
-                                'immediate': [False, 1.0, False],
+                                'speed': [False, 1.0, False],
                                 'lane_change': [False, 1.0, True],
                                 'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
 
-    def _calculate_immediate_reward(self):
+    def _calculate_speed_reward(self):
         """
-        In this function the possible immediate reward calculation models are implemented.
+        In this function the possible speed reward calculation models are implemented.
         :return:
         """
         if self.reward_dict["type"] == "basic":
-            reward = self.reward_dict['immediate'][1]
+            reward = self.reward_dict['speed'][1]
 
-        elif self.reward_dict["type"] in ['negative', 'all', 'positive', 'terminal_speed', "longitudinal"]:
-            reward = self.reward_dict['immediate'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
+        elif self.reward_dict["type"] in ['negative', 'all', 'positive', 'terminal_speed', "longitudinal", "features"]:
+            reward = self.reward_dict['speed'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
                      / self.desired_speed
         elif self.reward_dict["type"] in ['lateral', "terminal", "terminal_lane"]:
             reward = 0
@@ -547,8 +558,34 @@ class SUMOEnvironment(gym.Env):
             self.steps_done += 1
             self._refresh_environment()
 
-        # getting immediate reward
-        temp_reward["immediate"] = self._calculate_immediate_reward() if cause is None else 0
+        if temp_reward.get("keep_right", [False, False, False])[2]:
+            if self.observation is not None:
+                temp_reward["keep_right"] = 1 if self.observation["lane_id"] == 0 or (self.observation["ER"] == 1 and self.observation["RE"]["dv"]>=0) else 0
+            else:
+                temp_reward["keep_right"] = 0
+
+        if temp_reward.get("follow_distance", [False, False, False])[2]:
+            if self.observation is not None:
+                follow_time = ((self.observation["FE"]["dx"]+self.observation["FE"]["dv"]*self.dt) / self.observation["speed"]*2)
+                if follow_time < 1:
+                    temp_reward["follow_distance"] = max(follow_time - 1,-1)
+                else:
+                    temp_reward["follow_distance"] = 0
+            else:
+                temp_reward["follow_distance"] = -1
+
+        if temp_reward.get("cut_in_distance", [False, False, False])[2]:
+            if self.observation is not None:
+                follow_time = ((-1*self.observation["RE"]["dx"]-self.observation["RE"]["dv"]*self.dt) / self.observation["speed"]*2)
+                if follow_time < 0.5:
+                    temp_reward["cut_in_distance"] = max(2*(follow_time - 0.5), -1)
+                else:
+                    temp_reward["cut_in_distance"] = 0
+            else:
+                temp_reward["cut_in_distance"] = -1
+
+        # getting speed reward
+        temp_reward["speed"] = self._calculate_speed_reward() if cause is None else 0
         # getting lane change reward.
         temp_reward["lane_change"] = self.reward_dict["lane_change"][1] if is_lane_change and cause not in ["left_highway", "collision"] else 0
         # constructing the reward vector
