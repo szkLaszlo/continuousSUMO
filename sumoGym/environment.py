@@ -560,7 +560,7 @@ class SUMOEnvironment(gym.Env):
 
         if temp_reward.get("keep_right", [False, False, False])[2]:
             if self.observation is not None:
-                temp_reward["keep_right"] = 1 if self.observation["lane_id"] == 0 or (self.observation["ER"] == 1 and self.observation["RE"]["dv"]>=0) else 0
+                temp_reward["keep_right"] = 1 if self.observation["lane_id"] == 0 or (self.observation["ER"] == 1 and self.observation["RE"]["dv"]<1) else 0
             else:
                 temp_reward["keep_right"] = 0
 
