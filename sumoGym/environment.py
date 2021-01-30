@@ -175,7 +175,7 @@ class SUMOEnvironment(gym.Env):
         self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
-        self.state['velocity'] = self.desired_speed
+        self.state['speed'] = self.desired_speed
 
         if "continuous" in self.type_as:
             self.lateral_model = LateralModel(
@@ -183,6 +183,7 @@ class SUMOEnvironment(gym.Env):
                 lane_width=self.lane_width,
                 dt=self.dt
             )
+
 
         return self._get_observation()
 
@@ -276,7 +277,7 @@ class SUMOEnvironment(gym.Env):
                                 'collision': [True, -1.0, False],
                                 'slow': [True, -1.0, False],
                                 'left_highway': [True, -1.0, False],
-                                'speed': [False, 1.0, True],
+                                'speed': [False, 0.0, True],
                                 'lane_change': [False, 1.0, True],
                                 'keep_right': [False, 1.0, True],
                                 'follow_distance': [False, -1.0, True],
@@ -350,8 +351,9 @@ class SUMOEnvironment(gym.Env):
             reward = self.reward_dict['speed'][1]
 
         elif self.reward_dict["type"] in ['negative', 'all', 'positive', 'terminal_speed', "longitudinal", "features"]:
-            reward = self.reward_dict['speed'][1] - (abs(self.state['velocity'] - self.desired_speed)) \
-                     / self.desired_speed
+            dv = abs(self.state['speed'] - self.desired_speed)
+            reward = self.reward_dict['speed'][1] - dv / max(self.desired_speed, self.state["speed"])
+            assert -1 < reward <= 0
         elif self.reward_dict["type"] in ['lateral', "terminal", "terminal_lane"]:
             reward = 0
         else:
@@ -378,7 +380,7 @@ class SUMOEnvironment(gym.Env):
 
         self.egoID = None  # Resetting chosen ego vehicle id
         self.steps_done = 0  # resetting steps done
-        self.desired_speed = random.randint(100, 140) / 3.6
+        self.desired_speed = random.randint(110, 140) / 3.6
         self.state = None
         self.observation = None
         self.env_obs = None
@@ -434,7 +436,7 @@ class SUMOEnvironment(gym.Env):
         last_lane = lane_ID[:-1]
 
         # Setting vehicle speed according to selected action
-        traci.vehicle.setSpeed(self.egoID, lateral_state['velocity'])
+        traci.vehicle.setSpeed(self.egoID, lateral_state['speed'])
         # Potentially update lane
         # Checking if new lane is still on the road
         if lateral_state['lane_id'] != self.state['lane_id']:
@@ -455,7 +457,7 @@ class SUMOEnvironment(gym.Env):
         # Selecting action to do
         steering_angle, velocity_dif = self.calculate_action(action)
         # setting speed for the vehicle
-        traci.vehicle.setSpeed(self.egoID, min(self.state['velocity'] + velocity_dif, 50))
+        traci.vehicle.setSpeed(self.egoID, min(self.state['speed'] + velocity_dif, 50))
         if steering_angle != 0:
             lane = traci.vehicle.getLaneIndex(self.egoID)
             lane += steering_angle
@@ -487,7 +489,7 @@ class SUMOEnvironment(gym.Env):
                     cause, reward, terminated = self._get_terminating_events(True, left_=True)
                     self.render()
                     return self._get_observation(), sum(reward), terminated, {'cause': cause, 'cumulants': reward,
-                                                                       'velocity': self.state['velocity'],
+                                                                       'velocity': self.state['speed'],
                                                                        'distance': self.state['x_position']
                                                                                    - self.ego_start_position,
                                                                        'lane_change': self.lanechange_counter}
@@ -501,7 +503,7 @@ class SUMOEnvironment(gym.Env):
             self.render()
 
             return self._get_observation(), sum(reward), terminated, {'cause': cause, 'cumulants': reward,
-                                                               'velocity': self.state['velocity'],
+                                                               'velocity': self.state['speed'],
                                                                'distance': self.state['x_position']
                                                                            - self.ego_start_position,
                                                                'lane_change': self.lanechange_counter}
@@ -585,7 +587,7 @@ class SUMOEnvironment(gym.Env):
                 temp_reward["cut_in_distance"] = -1
 
         # getting speed reward
-        temp_reward["speed"] = self._calculate_speed_reward() if cause is None else 0
+        temp_reward["speed"] = self._calculate_speed_reward() if cause is None else -1
         # getting lane change reward.
         temp_reward["lane_change"] = self.reward_dict["lane_change"][1] if is_lane_change and cause not in ["left_highway", "collision"] else 0
         # constructing the reward vector
@@ -647,7 +649,7 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setRouteID(self.egoID, "r1")
 
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
-                # traci.vehicle.setSpeed(self.egoID, self.desired_speed)
+                traci.vehicle.setSpeed(self.egoID, self.desired_speed)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
                 traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
@@ -706,7 +708,7 @@ class SUMOEnvironment(gym.Env):
         Function to set random speed of ego(s)
         """
         # TODO: make this work for more ego
-        self.desired_speed = random.randint(100, 140) / 3.6
+        self.desired_speed = random.randint(110, 140) / 3.6
 
     def _calculate_discrete_action(self, action):
         """
@@ -758,7 +760,7 @@ class SUMOEnvironment(gym.Env):
         """
         This is used to refresh the environment
         Sets the current observation with respect to the representation.
-        and state in {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
+        and state in {'x_position', 'y_position', 'length', 'width', 'speed', 'lane_id', 'heading'}
         where the last dimension is the channels of speed, lane_id, and desired speed
         -------
 
@@ -769,7 +771,7 @@ class SUMOEnvironment(gym.Env):
         """
         Function for getting the cars and their attributes from SUMO.
         It also stores the env observation for visualisation processes.
-        :return: A car_id dict with {'x_position', 'y_position', 'length', 'width', 'velocity', 'lane_id', 'heading'}
+        :return: A car_id dict with {'x_position', 'y_position', 'length', 'width', 'speed', 'lane_id', 'heading'}
         """
         # Getting cars around ego vehicle
         cars_around = traci.vehicle.getAllContextSubscriptionResults()
@@ -786,7 +788,7 @@ class SUMOEnvironment(gym.Env):
                              'y_position': y,
                              'length': car[tc.VAR_LENGTH],
                              'width': car[tc.VAR_WIDTH],
-                             'velocity': car[tc.VAR_SPEED],
+                             'speed': car[tc.VAR_SPEED],
                              'lane_id': car[tc.VAR_LANE_INDEX],
                              'heading': fi}
                 environment_collection[car_id] = copy.copy(car_state)
@@ -818,9 +820,9 @@ class SUMOEnvironment(gym.Env):
                     self.y_range_grid - self.env_obs[car_id]['width'] / 2 * self.grid_per_meter):
 
                 # Drawing speed of the current car
-                velocity = self.env_obs[car_id]['velocity'] / 50
+                velocity = self.env_obs[car_id]['speed'] / 50
                 if self.egoID == car_id:
-                    velocity = 1-abs(self.env_obs[car_id]['velocity']-self.desired_speed)/self.desired_speed
+                    velocity = 1-abs(self.env_obs[car_id]['speed']-self.desired_speed)/self.desired_speed
                 observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
@@ -883,7 +885,7 @@ class SUMOEnvironment(gym.Env):
                     new_car = dict()
                     new_car['dx'] = (self.env_obs[car_id]['x_position'] - self.env_obs[self.egoID]['x_position'])
                     new_car['dy'] = (abs(self.env_obs[car_id]["y_position"] - self.env_obs[self.egoID]['y_position']))
-                    new_car['dv'] = (self.env_obs[car_id]['velocity'] - self.env_obs[self.egoID]['velocity'])
+                    new_car['dv'] = (self.env_obs[car_id]['speed'] - self.env_obs[self.egoID]['speed'])
                     new_car['l'] = (self.env_obs[car_id]["length"])
                     lane[self.env_obs[car_id]["lane_id"]].append(new_car)
 
@@ -935,7 +937,7 @@ class SUMOEnvironment(gym.Env):
             elif ego_state['lane_id'] == 2:
                 observation['EL'] = 1
 
-            observation['speed'] = ego_state['velocity']
+            observation['speed'] = ego_state['speed']
             observation['lane_id'] = ego_state['lane_id']  # todo: onehot vector
             observation['des_speed'] = self.desired_speed
             observation['heading'] = ego_state['heading']

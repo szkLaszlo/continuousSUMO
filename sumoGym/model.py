@@ -48,7 +48,7 @@ class LateralModel:
             'steering_angle': self.steering_angle,
             'x_position': state['x_position'],
             'y_position': state['y_position'],
-            'velocity': state['velocity'],
+            'speed': state['speed'],
             'lane_id': state['lane_id'],
 
             # Vehicle parameters that are not supposed to update:
@@ -93,14 +93,14 @@ class LateralModel:
          :return: new_state: containing the input vehicle's new position, orientation, speed, lane.
          """
         self.lateral_state['steering_angle'] = steering_angle
-        self.lateral_state['velocity'] += velocity_dif
+        self.lateral_state['speed'] += velocity_dif
 
         # Simulate the system + estimator
         # Resolution of the trajectory
         timesteps = np.array([0, self.dt])
 
         # Velocity array
-        v_curvy = np.full(timesteps.shape, self.lateral_state['velocity'])
+        v_curvy = np.full(timesteps.shape, self.lateral_state['speed'])
 
         # Steering angle array
         delta_curvy = np.full(timesteps.shape, self.lateral_state['steering_angle'])
@@ -244,7 +244,7 @@ def main():
     """
     state = {'x_position': 30,
              'y_position': 0,
-             'velocity': 10,
+             'speed': 10,
              'heading': -np.pi / 2,
              'lane_id': 1,
              'length': 5,
