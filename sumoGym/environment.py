@@ -573,6 +573,8 @@ class SUMOEnvironment(gym.Env):
                     temp_reward["follow_distance"] = max(follow_time - 1,-1)
                 else:
                     temp_reward["follow_distance"] = 0
+            elif cause is None:
+                temp_reward["follow_distance"] = 0
             else:
                 temp_reward["follow_distance"] = -1
 
@@ -583,13 +585,15 @@ class SUMOEnvironment(gym.Env):
                     temp_reward["cut_in_distance"] = max(2*(follow_time - 0.5), -1)
                 else:
                     temp_reward["cut_in_distance"] = 0
+            elif cause is None:
+                temp_reward["cut_in_distance"] = 0
             else:
                 temp_reward["cut_in_distance"] = -1
 
         # getting speed reward
         temp_reward["speed"] = self._calculate_speed_reward() if cause is None else -1
         # getting lane change reward.
-        temp_reward["lane_change"] = self.reward_dict["lane_change"][1] if is_lane_change and cause not in ["left_highway", "collision"] else 0
+        temp_reward["lane_change"] = self.reward_dict["lane_change"][1] if is_lane_change and cause is None else 0
         # constructing the reward vector
         reward = self.get_max_reward(temp_reward)
 
