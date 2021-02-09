@@ -240,7 +240,7 @@ class SUMOEnvironment(gym.Env):
                 self.action_space = spaces.Discrete(3)
                 self.calculate_action = self._calculate_discrete_lateral_action
             else:
-                self.action_space = spaces.Discrete(9)
+                self.action_space = spaces.MultiDiscrete([3, 3])
                 self.calculate_action = self._calculate_discrete_action
             self.model_step = self._discrete_step
 
@@ -639,8 +639,8 @@ class SUMOEnvironment(gym.Env):
         :param action: Int
         :return: [steering, acceleration] values
         """
-        steer = self.steering_constant[action // len(self.steering_constant)]
-        acc = self.accel_constant[action % len(self.accel_constant)]
+        steer = self.steering_constant[action[:,0].item()]
+        acc = self.accel_constant[action[:,1].item()]
         return [steer, acc]
 
     def _calculate_discrete_longitudinal_action(self, action):
@@ -649,7 +649,7 @@ class SUMOEnvironment(gym.Env):
         :param action: Int
         :return: [0, acceleration] values
         """
-        acc = self.accel_constant[action]
+        acc = self.accel_constant[action[1]]
         return [0.0, acc]
 
     def _calculate_discrete_lateral_action(self, action):
@@ -658,7 +658,7 @@ class SUMOEnvironment(gym.Env):
         :param action: Int
         :return: [steering, 0] values
         """
-        steer = self.steering_constant[action]
+        steer = self.steering_constant[action[1]]
         return [steer, 0.0]
 
     @staticmethod
