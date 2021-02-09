@@ -436,7 +436,7 @@ class SUMOEnvironment(gym.Env):
 
         if left_:
             cause = "left_highway"
-            temp_reward['success'] = 0
+            temp_reward['success'] = -1
             terminated = True
             self.egoID = None
             self.observation = None
@@ -445,7 +445,7 @@ class SUMOEnvironment(gym.Env):
         elif self.egoID in traci.simulation.getArrivedIDList() and self.state['x_position'] >= self.end_zone - 10:
             # Case for completing the highway without a problem
             cause = None
-            temp_reward['success'] = -1
+            temp_reward['success'] = 0
             terminated = True
             self.egoID = None
             self.observation = None
