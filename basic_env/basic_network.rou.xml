@@ -7,14 +7,14 @@
 <!--    </routeDistribution>-->
     <route id="r1"
            edges="a b"/>
-    <vType id="car1" length="5.2" accel="4" decel="7" arrivalPos="max" sigma="0.5" speedFactor="normc(1.5,0.5,0.7,1.8)" probability="0.2" lcCooperative="0"
-           lcKeepRight="0"/>
-    <vType id="car2" length="5.2" accel="5" decel="6" arrivalPos="max" sigma="0.5" speedFactor="normc(1,0.3,0.7,1.4)" probability="0.1" lcCooperative="0"
-           lcKeepRight="0.3"/>
-    <vType id="car4" length="4.5" accel="5" decel="6" arrivalPos="max" sigma="0" speedFactor="normc(1.2,0.45,0.6,1.3)" lcCooperative="0"
-           lcKeepRight="0" probability="0.3"/>
-    <vType id="car3" length="5" accel="5" decel="6" arrivalPos="max" sigma="0.5" speedFactor="normc(1,0.2,0.7,1.1)" probability="0.4" lcCooperative="0"
-           lcKeepRight="1"/>
+    <vType id="car1" length="5.2" accel="4" decel="7" arrivalPos="max" sigma="0.5" speedFactor="normc(1.5,0.5,0.7,1.8)"
+           probability="0.2" lcCooperative="0" lcKeepRight="0"/>
+    <vType id="car2" length="5.2" accel="5" decel="6" arrivalPos="max" sigma="0.5" speedFactor="normc(1,0.3,0.7,1.4)"
+           probability="0.1" lcCooperative="0" lcKeepRight="1"/>
+    <vType id="car4" length="4.5" accel="5" decel="6" arrivalPos="max" sigma="0" speedFactor="normc(1.2,0.45,0.6,1.3)"
+           lcCooperative="0" lcKeepRight="0" probability="0.3"/>
+    <vType id="car3" length="5" accel="5" decel="6" arrivalPos="max" sigma="0.5" speedFactor="normc(1,0.2,0.7,1.1)"
+           probability="0.4" lcCooperative="0" lcKeepRight="1"/>
     <vType id="ego" length="5" accel="50" decel="60" arrivalPos="max" sigma="1"/>
     <vType id="car5" length="5" accel="5" decel="6" arrivalPos="max" sigma="0.8" lcCooperative="0" lcKeepRight="0.5"
            speedFactor="normc(1, 0.2, 0.7, 1)"/>
