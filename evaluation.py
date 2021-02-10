@@ -6,12 +6,10 @@ import glob
 import json
 import os
 import pickle
-import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from mpl_toolkits.axes_grid1 import Grid
 
 """
 FL
@@ -40,29 +38,30 @@ RR
 17 - heading
 """
 
+
 def plot_episode_stat(file):
     with open(file, "br") as f:
         dict_ = pickle.load(f)
     s = np.asarray(dict_["state"][:-1])
     r = np.asarray(dict_["reward"])
-    front_left_distance=s[:,0] * 50
-    front_ego_distance=s[:,2] * 50
-    front_right_distance = s[:,4] * 50
-    front_left_speeds = s[:,1] * 50
-    front_ego_speeds = s[:,3] * 50
-    front_right_speeds = s[:,5] * 50
-    rear_left_distances = s[:,6] * 50
-    rear_ego_distances = s[:,8] * 50
-    rear_right_distances = s[:,10] * 50
-    rear_left_speeds = s[:,7] * 50
-    rear_ego_speeds = s[:,9] * 50
-    rear_right_speeds = s[:,11] * 50
-    lanes = s[:,15] * 2
-    speeds = s[:,14] * 50
-    desired_speeds = s[:,16] * 50
+    front_left_distance = s[:, 0] * 50
+    front_ego_distance = s[:, 2] * 50
+    front_right_distance = s[:, 4] * 50
+    front_left_speeds = s[:, 1] * 50
+    front_ego_speeds = s[:, 3] * 50
+    front_right_speeds = s[:, 5] * 50
+    rear_left_distances = s[:, 6] * 50
+    rear_ego_distances = s[:, 8] * 50
+    rear_right_distances = s[:, 10] * 50
+    rear_left_speeds = s[:, 7] * 50
+    rear_ego_speeds = s[:, 9] * 50
+    rear_right_speeds = s[:, 11] * 50
+    lanes = s[:, 15] * 2
+    speeds = s[:, 14] * 50
+    desired_speeds = s[:, 16] * 50
 
-    front_visible = front_ego_distance<48
-    rear_visible = rear_ego_distances>-48
+    front_visible = front_ego_distance < 48
+    rear_visible = rear_ego_distances > -48
     time_ = np.asarray(list(range(len(lanes))))
     lanes = np.asarray(lanes)
     # # Plotting front distances relative to the ego based on the different lanes
@@ -122,24 +121,24 @@ def plot_episode_stat(file):
     # plt.ylabel("Time in-between vehicles [s]")
     # plt.show()
     # summing the correct situation when the ego is keeping right as much as it can.
-    keep_right = (sum(lanes==0) + sum(np.logical_and(lanes!=0,s[:,13]==1)))/len(lanes)
-    lane_changes = lanes[1:]!=lanes[:-1]
+    keep_right = (sum(lanes == 0) + sum(np.logical_and(lanes != 0, s[:, 13] == 1))) / len(lanes)
+    lane_changes = lanes[1:] != lanes[:-1]
     distance_before_lane_change = front_ego_distance[:-1][np.logical_and(lane_changes, front_visible[:-1])]
     distance_after_lane_change = rear_ego_distances[1:][np.logical_and(lane_changes, rear_visible[:-1])]
 
-    speed_diff_before_lane_change = (front_ego_speeds+speeds)[:-1][np.logical_and(lane_changes, front_visible[:-1])]
-    speed_diff_after_lane_change = (rear_ego_speeds+speeds)[1:][np.logical_and(lane_changes, rear_visible[:-1])]
+    speed_diff_before_lane_change = (front_ego_speeds + speeds)[:-1][np.logical_and(lane_changes, front_visible[:-1])]
+    speed_diff_after_lane_change = (rear_ego_speeds + speeds)[1:][np.logical_and(lane_changes, rear_visible[:-1])]
 
-    #time_ of approach
-    tiv_before_lane_change = distance_before_lane_change/speed_diff_before_lane_change
-    tiv_after_lane_change = distance_after_lane_change/speed_diff_after_lane_change
+    # time_ of approach
+    tiv_before_lane_change = distance_before_lane_change / speed_diff_before_lane_change
+    tiv_after_lane_change = distance_after_lane_change / speed_diff_after_lane_change
 
     return {'ego_speed': speeds,
             "follow_distance": front_ego_distance[front_visible],
-            "front_tiv": front_ego_distance[front_visible]/(front_ego_speeds[front_visible]+speeds[front_visible]),
-            "rear_tiv": rear_ego_distances[rear_visible]/(rear_ego_speeds[rear_visible]+speeds[rear_visible]),
-            "lane_changes": sum(lane_changes)/len(lane_changes),
-            "desired_speed_difference": speeds-desired_speeds,
+            "front_tiv": front_ego_distance[front_visible] / (front_ego_speeds[front_visible] + speeds[front_visible]),
+            "rear_tiv": rear_ego_distances[rear_visible] / (rear_ego_speeds[rear_visible] + speeds[rear_visible]),
+            "lane_changes": sum(lane_changes) / len(lane_changes),
+            "desired_speed_difference": speeds - desired_speeds,
             "keeping_right": keep_right,
             "distance_before_lane_change": distance_before_lane_change,
             "distance_after_lane_change": distance_after_lane_change,
@@ -160,26 +159,35 @@ def plot_evaluation_statistics(path_to_env_log, extention="*.pkl"):
         return_dict = plot_episode_stat(filename)
         return_dict["weights"] = params["w"]
         statistics_in_folder.append(return_dict)
-    return  statistics_in_folder
+    return statistics_in_folder
 
-def eval_full_statistics(global_statistics, save_figures_path = None ):
+
+def eval_full_statistics(global_statistics, save_figures_path=None):
     eval_values = ["ego_speed", "follow_distance", "front_tiv", "lane_changes", "distance_before_lane_change",
                    "distance_after_lane_change", "keeping_right", "desired_speed_difference",
                    "tiv_after_lane_change", "tiv_before_lane_change"]
     if save_figures_path is not None and not os.path.exists(save_figures_path):
         os.makedirs(save_figures_path)
+    global_statsss = []
+    global_names = []
+    global_labels = []
     for name in eval_values:
         name_list = []
         name_stat = []
         for i, item in enumerate(global_statistics):
             episode_stat = []
             for episode in item:
-                episode_stat.append(copy.deepcopy(np.expand_dims(episode[name],-1) if episode[name].ndim == 0 else episode[name]))
+                episode_stat.append(
+                    copy.deepcopy(np.expand_dims(episode[name], -1) if episode[name].ndim == 0 else episode[name]))
             episode_stat = np.concatenate(episode_stat)
             name_list.append(str(episode["weights"]))
             # plt.hist(episode_stat, bins=min(episode_stat.size//10, 50), histtype="barstacked", density=True, label=name_list[-1], stacked=True)
             name_stat.append(episode_stat)
-        fig_plot(data=name_stat, title=name, names=name_list)
+        global_statsss.append(name_stat)
+        global_names.append(name)
+        global_labels.append(name_list)
+        # fig_plot(data=name_stat, title=name, names=name_list)
+
         # fig, ax = plt.subplots(len(name_stat) // 2, 2, sharex=True, sharey=True)
         # plt.title(name)
         # for i, ax_i in enumerate(ax.flatten()):
@@ -191,25 +199,35 @@ def eval_full_statistics(global_statistics, save_figures_path = None ):
         # plt.tight_layout()
         # plt.show()
 
-        if save_figures_path is not None:
-            plt.savefig(f'{save_figures_path}/{name}_hist.jpg')
-            plt.cla()
-            plt.clf()
-        else:
-            plt.show()
+        # if save_figures_path is not None:
+        #     plt.savefig(f'{save_figures_path}/{name}_hist.jpg')
+        #     plt.cla()
+        #     plt.clf()
+        # else:
+        #     plt.show()
 
-        sns.boxplot(data=name_stat, fliersize=0)
-        # sns.boxplot(name_stat, labels=name_list, autorange=True, showfliers=True,
-        #             notch=True,meanline=True, whis=[5,95], sym="", vert=False)
-        plt.title(name)
-        if save_figures_path is not None:
-            plt.savefig(f'{save_figures_path}/{name}_boxplot.jpg')
-            plt.cla()
-            plt.clf()
-        else:
-            plt.show()
+        # sns.boxplot(data=name_stat, fliersize=0)
 
-        print()
+    draw_boxplot(global_statsss, global_labels, global_names)
+    if save_figures_path is not None:
+        plt.savefig(f'{save_figures_path}/all_boxplot.jpg')
+        plt.cla()
+        plt.clf()
+    else:
+        plt.show()
+
+
+def draw_boxplot(data, labels, names):
+    fig, axes = plt.subplots(data.__len__() // 2, 2, sharex=False, sharey=True, figsize=(8, 12))
+    # fig.suptitle("title")
+    plt.autoscale()
+    for i, ax in enumerate(axes.flatten()):
+        ax.boxplot(data[i], autorange=True, showfliers=True,
+                   notch=True, meanline=True, whis=[5, 95], sym="", vert=False)
+        ax.set_title(names[i])
+        # ax.annotate(names[i], (0.5, 0.9), xycoords='axes fraction', va='center', ha='center')
+
+
 def fig_plot(data, title, names):
     fig, axes = plt.subplots(data.__len__() // 2, 2, sharex=True, sharey=True, figsize=(8, 12))
     fig.suptitle(title)
@@ -227,15 +245,20 @@ def fig_plot(data, title, names):
                      label=names[i])
         ax.annotate(names[i], (0.5, 0.9), xycoords='axes fraction', va='center', ha='center')
 
+
 if __name__ == "__main__":
-    dir_of_eval = "/cache/hdd/new_rewards/FastRLv1_SuMoGyM_discrete/20210130_163259"
-    global_stat = []
-    eval_dirs = os.listdir(dir_of_eval)
-    for dir_ in eval_dirs:
-        if "eval" not in dir_:
-            continue
-        single_stat = plot_evaluation_statistics(os.path.join(dir_of_eval,dir_,"env"))
-        global_stat.append(single_stat)
-    eval_full_statistics(global_stat, save_figures_path=os.path.join(dir_of_eval, f"plots_{time.strftime('%Y%m%d_%H%M%S', time.gmtime())}"))
+    dir_of_eval = [
+        # "/cache/hdd/new_rewards/FastRLv1_SuMoGyM_discrete/20210130_163259",
+        "/cache/hdd/new_rewards/Qnetwork_SimpleMLP_SuMoGyM_discrete/20210209_101340"]
+    for run in dir_of_eval:
+        global_stat = []
+        eval_dirs = os.listdir(run)
+        for dir_ in eval_dirs:
+            if "eval" not in dir_:
+                continue
+            single_stat = plot_evaluation_statistics(os.path.join(run, dir_, "env"))
+            global_stat.append(single_stat)
+        eval_full_statistics(global_stat,
+                             )  # save_figures_path=os.path.join(dir_of_eval, f"plots_{time.strftime('%Y%m%d_%H%M%S', time.gmtime())}"))
 
     print()
