@@ -157,9 +157,32 @@ def plot_evaluation_statistics(path_to_env_log, extention="*.pkl"):
     statistics_in_folder = []
     for filename in files:
         return_dict = plot_episode_stat(filename)
-        return_dict["weights"] = params["w"]
+        return_dict["weights"] =  params.get("model", "") + " "+ decode_w_for_readable_names(params["w"])
         statistics_in_folder.append(return_dict)
     return statistics_in_folder
+
+def decode_w_for_readable_names(w):
+
+    if w == [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]:
+        w_string = "safe"
+    elif w == [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]:
+        w_string = "safe and speedy"
+    elif w == [1.0, 0.0, 1.0, 0.0, 0.0, 0.0]:
+        w_string = "safe LC"
+    elif w == [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]:
+        w_string = "safe right"
+    elif w == [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]:
+        w_string = "safe follow"
+    elif w == [1.0, 0.0, 0.0, 0.0, 0.0, 1.0]:
+        w_string = "safe cut-in"
+    elif w == [1.0, 0.0, 0.0, 0.0, 1.0, 1.0]:
+        w_string = "safe follow cut-in"
+    elif w == [1.0, 1.0, 0.0, 1.0, 1.0, 1.0]:
+        w_string = "all but lc"
+    else:
+        w_string = "None"
+
+    return  w_string
 
 
 def eval_full_statistics(global_statistics, save_figures_path=None):
@@ -180,7 +203,7 @@ def eval_full_statistics(global_statistics, save_figures_path=None):
                 episode_stat.append(
                     copy.deepcopy(np.expand_dims(episode[name], -1) if episode[name].ndim == 0 else episode[name]))
             episode_stat = np.concatenate(episode_stat)
-            name_list.append(str(episode["weights"]))
+            name_list.append(episode["weights"])
             # plt.hist(episode_stat, bins=min(episode_stat.size//10, 50), histtype="barstacked", density=True, label=name_list[-1], stacked=True)
             name_stat.append(episode_stat)
         global_statsss.append(name_stat)
@@ -222,11 +245,10 @@ def draw_boxplot(data, labels, names):
     # fig.suptitle("title")
     plt.autoscale()
     for i, ax in enumerate(axes.flatten()):
-        ax.boxplot(data[i], autorange=True, showfliers=True,
-                   notch=True, meanline=True, whis=[5, 95], sym="", vert=False)
+        ax.boxplot(data[i], labels=labels[i], autorange=True, showfliers=True,
+                   notch=False, meanline=True, whis=[5, 95], sym="", vert=False)
         ax.set_title(names[i])
         # ax.annotate(names[i], (0.5, 0.9), xycoords='axes fraction', va='center', ha='center')
-
 
 def fig_plot(data, title, names):
     fig, axes = plt.subplots(data.__len__() // 2, 2, sharex=True, sharey=True, figsize=(8, 12))
@@ -248,7 +270,7 @@ def fig_plot(data, title, names):
 
 if __name__ == "__main__":
     dir_of_eval = [
-        # "/cache/hdd/new_rewards/FastRLv1_SuMoGyM_discrete/20210130_163259",
+        "/cache/hdd/new_rewards/FastRLv1_SuMoGyM_discrete/20210130_163259",
         "/cache/hdd/new_rewards/Qnetwork_SimpleMLP_SuMoGyM_discrete/20210209_101340"]
     for run in dir_of_eval:
         global_stat = []
