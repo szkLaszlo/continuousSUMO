@@ -403,7 +403,8 @@ class SUMOEnvironment(gym.Env):
                 if "lane" in exc.args[0]:
                     cause, reward, terminated = self._get_terminating_events(True, left_=True)
                     self.render()
-                    return self._get_observation(), reward, terminated, {'cause': cause,
+                    return self._get_observation(), sum(reward), terminated, {'cause': cause,
+                                                                              'cumulants': reward,
                                                                               'velocity': self.state['speed'],
                                                                               'distance': self.state['x_position']
                                                                                           - self.ego_start_position,
@@ -421,7 +422,8 @@ class SUMOEnvironment(gym.Env):
             # creating the images if render is true.
             self.render()
 
-            return self._get_observation(), reward, terminated, {'cause': cause,
+            return self._get_observation(), sum(reward), terminated, {'cause': cause,
+                                                                      'cumulants': reward,
                                                                       'velocity': self.state['speed'],
                                                                       'distance': self.state['x_position']
                                                                                   - self.ego_start_position,
