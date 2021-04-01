@@ -69,9 +69,11 @@ class SUMOEnvironment(gym.Env):
                  seed=None):
 
         super(SUMOEnvironment, self).__init__()
+        self.render_mode = mode
+        self.save_path = None
         self.name = "SuMoGyM"
         np.random.seed(seed if seed is not None else 42)
-        self.seed = seed
+        self.seed_ = seed
         if radar_range is None:
             radar_range = [50, 9]  # x and y
         self.radar_range = radar_range
@@ -132,7 +134,7 @@ class SUMOEnvironment(gym.Env):
                         ]
 
         self.sumoCmd.append("--seed")
-        self.sumoCmd.append(str(int(np.random.randint(0, 1000000))) if self.seed is None else f"{self.seed}")
+        self.sumoCmd.append(str(int(np.random.randint(0, 1000000))) if self.seed_ is None else f"{self.seed_}")
 
         traci.start(self.sumoCmd[:4])
 
@@ -159,8 +161,8 @@ class SUMOEnvironment(gym.Env):
         """
         # Changing configuration
         self._choose_random_simulation()
-        if self.seed is None:
-            self.update_seed()
+        if self.seed_ is None:
+            self.seed()
         # Loads traci configuration
         traci.load(self.sumoCmd[1:])
         # Resetting configuration
@@ -183,13 +185,17 @@ class SUMOEnvironment(gym.Env):
 
         return self._get_observation()
 
-    def update_seed(self):
+    def seed(self, seed=None):
         """
 
         :return:
         """
         index = self.sumoCmd.index("--seed")
-        self.sumoCmd[index + 1] = str(int(np.random.randint(0, 1000000)))
+        if seed is None:
+            self.sumoCmd[index + 1] = str(int(np.random.randint(0, 1000000)))
+        else:
+            self.sumoCmd[index + 1] = str(int(seed))
+        self.seed_ = seed
 
     def _setup_observation_space(self, x_range=50, y_range=9):
         """
@@ -397,7 +403,7 @@ class SUMOEnvironment(gym.Env):
                 if "lane" in exc.args[0]:
                     cause, reward, terminated = self._get_terminating_events(True, left_=True)
                     self.render()
-                    return self._get_observation(), sum(reward), terminated, {'cause': cause, 'cumulants': reward,
+                    return self._get_observation(), reward, terminated, {'cause': cause,
                                                                               'velocity': self.state['speed'],
                                                                               'distance': self.state['x_position']
                                                                                           - self.ego_start_position,
@@ -415,7 +421,7 @@ class SUMOEnvironment(gym.Env):
             # creating the images if render is true.
             self.render()
 
-            return self._get_observation(), sum(reward), terminated, {'cause': cause, 'cumulants': reward,
+            return self._get_observation(), reward, terminated, {'cause': cause,
                                                                       'velocity': self.state['speed'],
                                                                       'distance': self.state['x_position']
                                                                                   - self.ego_start_position,
@@ -514,7 +520,7 @@ class SUMOEnvironment(gym.Env):
         else:
             temp_reward["speed"] = self.reward_dict[cause][1]
         # getting lane change reward.
-        if is_lane_change:
+        if is_lane_change and cause is None:
             temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
         elif cause is None:
             temp_reward["lane_change"] = self.reward_dict["lane_change"][1] -1
