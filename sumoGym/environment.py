@@ -257,10 +257,10 @@ class SUMOEnvironment(gym.Env):
             raise NotImplementedError
         elif reward_type == 'features':
             self.reward_dict = {'success': [True, 0.0, True],  # if successful episode
-                                'collision': [True, -1.0, False],  # when causing collision
-                                'slow': [True, -1.0, False],  # when being too slow
-                                'left_highway': [True, -1.0, False],  # when leaving highway
-                                'speed': [False, 0.0, True],
+                                'collision': [True, -100.0, False],  # when causing collision
+                                'slow': [True, -100.0, False],  # when being too slow
+                                'left_highway': [True, -100.0, False],  # when leaving highway
+                                'speed': [False, 1.0, True],
                                 # negative reward proportional to the difference from v_des
                                 'lane_change': [False, 1.0, True],  # successful lane-change
                                 'keep_right': [False, 1.0, True],  # whenever the available most right lane is used
@@ -436,7 +436,7 @@ class SUMOEnvironment(gym.Env):
 
         if left_:
             cause = "left_highway"
-            temp_reward['success'] = -1
+            temp_reward['success'] = self.reward_dict[cause][1]
             terminated = True
             self.egoID = None
             self.observation = None
@@ -451,15 +451,15 @@ class SUMOEnvironment(gym.Env):
             self.observation = None
 
         elif self.egoID in traci.simulation.getCollidingVehiclesIDList():  # or self._check_collision( environment_collection):
-            temp_reward['success'] = -1
             cause = "collision"
+            temp_reward['success'] = self.reward_dict[cause][1]
             terminated = True
             self.egoID = None
             self.observation = None
 
         elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (60 / 3.6):
-            cause = 'slow' if self.reward_dict['slow'][0] else None
-            temp_reward['success'] = -1
+            cause = 'slow'
+            temp_reward['success'] = self.reward_dict[cause][1]
             terminated = True
             self.egoID = None
             self.observation = None
@@ -509,10 +509,10 @@ class SUMOEnvironment(gym.Env):
 
         # getting speed reward
         dv = abs(self.state['speed'] - self.desired_speed)
-        temp_reward["speed"] = 0 - dv / max(self.desired_speed, self.state["speed"])\
-            if cause is None else -1
+        temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])\
+            if cause is None else self.reward_dict["speed"][1] - 1
         # getting lane change reward.
-        temp_reward["lane_change"] = 1 if is_lane_change and cause is None else 0
+        temp_reward["lane_change"] = self.reward_dict["lane_change"][1] if is_lane_change and cause is None else self.reward_dict["lane_change"][1] - 1
         # constructing the reward vector
         reward = self.get_max_reward(temp_reward) * self.default_w
 
