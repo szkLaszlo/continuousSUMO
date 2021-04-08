@@ -266,14 +266,29 @@ class SUMOEnvironment(gym.Env):
                                 'collision': [True, -100.0, False],  # when causing collision
                                 'slow': [True, -100.0, False],  # when being too slow
                                 'left_highway': [True, -100.0, False],  # when leaving highway
+                                'speed': [False, 0.0, True],
+                                # negative reward proportional to the difference from v_des
+                                'lane_change': [False, 0.0, True],  # successful lane-change
+                                'keep_right': [False, 0.0, True],  # whenever the available most right lane is used
+                                'follow_distance': [False, 0.0, True],
+                                # whenever closer than required follow distance,
+                                # proportional negative
+                                'cut_in_distance': [False, 0.0, True],  # whenever cuts in closer then should.
+                                'type': reward_type}
+
+        elif reward_type == 'positive':
+            self.reward_dict = {'success': [True, 0.0, False],  # if successful episode
+                                'collision': [True, -1.0, False],  # when causing collision
+                                'slow': [True, -1.0, False],  # when being too slow
+                                'left_highway': [True, -1.0, False],  # when leaving highway
                                 'speed': [False, 1.0, True],
                                 # negative reward proportional to the difference from v_des
                                 'lane_change': [False, 1.0, True],  # successful lane-change
                                 'keep_right': [False, 1.0, True],  # whenever the available most right lane is used
-                                'follow_distance': [False, -1.0, True],
+                                'follow_distance': [False, 1.0, True],
                                 # whenever closer than required follow distance,
                                 # proportional negative
-                                'cut_in_distance': [False, -1.0, True],  # whenever cuts in closer then should.
+                                'cut_in_distance': [False, 1.0, True],  # whenever cuts in closer then should.
                                 'type': reward_type}
         else:
             raise RuntimeError("Reward system can not be found")
@@ -484,21 +499,26 @@ class SUMOEnvironment(gym.Env):
         if temp_reward.get("keep_right", [False, False, False])[2]:
             if self.observation is not None:
                 temp_reward["keep_right"] = self.reward_dict["keep_right"][1] if self.observation["lane_id"] == 0 or (
-                            self.observation["ER"] == 1 and self.observation["RE"]["dv"] < 1) else self.reward_dict["keep_right"][1] -1
+                        self.observation["ER"] == 1 and self.observation["RE"]["dv"] < 1) else \
+                self.reward_dict["keep_right"][1] - 1
             else:
-                temp_reward["keep_right"] = self.reward_dict[cause][1] if cause is not None else 0
+                if cause is not None:
+                    temp_reward["keep_right"] = self.reward_dict[cause][1]
+                else:
+                    temp_reward["keep_right"] = 0
 
         if temp_reward.get("follow_distance", [False, False, False])[2]:
             if self.observation is not None:
                 follow_time = (
-                            (self.observation["FE"]["dx"] + self.observation["FE"]["dv"] * self.dt) / self.observation[
-                        "speed"] * 2)
+                        (self.observation["FE"]["dx"] + self.observation["FE"]["dv"] * self.dt) / self.observation[
+                    "speed"] * 2)
                 if follow_time < 1:
-                    temp_reward["follow_distance"] = max(follow_time - 1, -1)
+                    temp_reward["follow_distance"] = max(self.reward_dict["follow_distance"][1] + follow_time - 1,
+                                                         self.reward_dict["follow_distance"][1] - 1)
                 else:
-                    temp_reward["follow_distance"] = 0
+                    temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
             elif cause is None:
-                temp_reward["follow_distance"] = 0
+                temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
             else:
                 temp_reward["follow_distance"] = self.reward_dict[cause][1]
 
@@ -507,11 +527,13 @@ class SUMOEnvironment(gym.Env):
                 follow_time = ((-1 * self.observation["RE"]["dx"] - self.observation["RE"]["dv"] * self.dt) /
                                self.observation["speed"] * 2)
                 if follow_time < 0.5:
-                    temp_reward["cut_in_distance"] = max(2 * (follow_time - 0.5), -1)
+                    temp_reward["cut_in_distance"] = max(
+                        self.reward_dict["cut_in_distance"][1] + 2 * (follow_time - 0.5),
+                        self.reward_dict["cut_in_distance"][1] - 1)
                 else:
-                    temp_reward["cut_in_distance"] = 0
+                    temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
             elif cause is None:
-                temp_reward["cut_in_distance"] = 0
+                temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
             else:
                 temp_reward["cut_in_distance"] = self.reward_dict[cause][1]
 
@@ -525,7 +547,7 @@ class SUMOEnvironment(gym.Env):
         if is_lane_change and cause is None:
             temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
         elif cause is None:
-            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] -1
+            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] - 1
         else:
             temp_reward["lane_change"] = self.reward_dict[cause][1]
         # constructing the reward vector
