@@ -140,7 +140,7 @@ def plot_episode_stat(file):
             "lane_changes": sum(lane_changes) / len(lane_changes),
             "desired_speed_difference": speeds - desired_speeds,
             "keeping_right": keep_right,
-            "average_reward_per_step": r.mean(),
+            "average_reward_per_step": r.mean() if len(r.shape) < 2 else r.sum(-1).mean(),
             "cause": cause,
             "distance_before_lane_change": distance_before_lane_change,
             "distance_after_lane_change": distance_after_lane_change,
@@ -208,9 +208,10 @@ def draw_causes(cause_dicts, labels):
         ax.bar_label(rects, label_type='center', color=text_color)
     ax.legend(ncol=len(category_names), bbox_to_anchor=(0, 1),
               loc='lower left', fontsize='small')
+    plt.tight_layout()
 
 def eval_full_statistics(global_statistics, save_figures_path=None):
-    eval_values = ["ego_speed", "desired_speed_difference", "follow_distance", "front_tiv",
+    eval_values = ["ego_speed", "desired_speed_difference", "front_tiv", "rear_tiv",
                    "lane_changes", "keeping_right", "average_reward_per_step",
                    "tiv_before_lane_change", "tiv_after_lane_change", ]
     if save_figures_path is not None and not os.path.exists(save_figures_path):
@@ -261,13 +262,14 @@ def eval_full_statistics(global_statistics, save_figures_path=None):
 
 def draw_boxplot(data, labels, names):
     fig, axes = plt.subplots(data.__len__() // 2, 2, sharex=False, sharey=True, figsize=(8, 12))
-    # fig.suptitle("title")
+    fig.suptitle("Evaluating episodic behavior")
     plt.autoscale()
     for i, ax in enumerate(axes.flatten()):
         ax.boxplot(data[i], labels=labels[i], autorange=True, showfliers=True,
                    notch=False, meanline=True, whis=[5, 95], sym="", vert=False)
         ax.set_title(names[i])
         # ax.annotate(names[i], (0.5, 0.9), xycoords='axes fraction', va='center', ha='center')
+    plt.tight_layout()
 
 def fig_plot(data, title, names):
     fig, axes = plt.subplots(data.__len__() // 2, 2, sharex=True, sharey=True, figsize=(8, 12))
@@ -290,7 +292,7 @@ def fig_plot(data, title, names):
 if __name__ == "__main__":
     dir_of_eval = [
         # "/cache/RL/training_with_policy/Qnetwork_SimpleMLP_SuMoGyM_discrete/20210324_102545/",
-        "/cache/RL/Eval_fastrl/",
+        "/cache/RL/training_with_policy/FastRLv1_SuMoGyM_discrete/tits/",
         # "/cache/hdd/new_rewards/Qnetwork_SimpleMLP_SuMoGyM_discrete/20210209_101340",
     ]
     for run in dir_of_eval:

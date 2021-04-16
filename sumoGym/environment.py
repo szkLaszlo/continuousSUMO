@@ -277,7 +277,7 @@ class SUMOEnvironment(gym.Env):
                                 'type': reward_type}
 
         elif reward_type == 'positive':
-            self.reward_dict = {'success': [True, 0.0, False],  # if successful episode
+            self.reward_dict = {'success': [True, 0.0, True],  # if successful episode
                                 'collision': [True, -1.0, False],  # when causing collision
                                 'slow': [True, -1.0, False],  # when being too slow
                                 'left_highway': [True, -1.0, False],  # when leaving highway
