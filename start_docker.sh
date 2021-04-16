@@ -11,7 +11,7 @@ if [ ${#docker_list[@]} -gt 1 ]; then
         fi
 elif [ ${#docker_list[@]} -eq 0 ]; then
         echo "We have no running docker container, so we start one."
-    cd docker-compose -f ./docker-compose.yml run --name docker_sumo --rm --service-ports sumo
+   docker-compose -f ./docker-compose.yml run --name docker_sumo --rm --service-ports sumo
 else
         echo "We are entering the only running docker container."
     docker exec -it --user=$UID ${docker_list[0]} /bin/bash
