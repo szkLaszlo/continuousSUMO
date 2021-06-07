@@ -500,7 +500,7 @@ class SUMOEnvironment(gym.Env):
             if self.observation is not None:
                 temp_reward["keep_right"] = self.reward_dict["keep_right"][1] if self.observation["lane_id"] == 0 or (
                         self.observation["ER"] == 1 and self.observation["RE"]["dv"] < 1) else \
-                self.reward_dict["keep_right"][1] - 1
+                    self.reward_dict["keep_right"][1] - 1
             else:
                 if cause is not None:
                     temp_reward["keep_right"] = self.reward_dict[cause][1]
@@ -782,7 +782,9 @@ class SUMOEnvironment(gym.Env):
                 # Drawing speed of the current car
                 velocity = self.env_obs[car_id]['speed'] / 50
                 if self.egoID == car_id:
-                    velocity = 1 - abs(self.env_obs[car_id]['speed'] - self.desired_speed) / self.desired_speed
+                    velocity = 1 - abs(self.env_obs[car_id]['speed'] - self.desired_speed) / max(self.desired_speed,
+                                                                                                 self.env_obs[car_id][
+                                                                                                     "speed"])
                 observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
