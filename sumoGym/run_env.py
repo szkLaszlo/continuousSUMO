@@ -14,9 +14,9 @@ def main():
     # Modify simulation_directory for your directory path
     env = gym.make('SUMOEnvironment-v0',
                    simulation_directory='../basic_env',
-                   type_os="image",
+                   type_os="structured",
                    type_as='discrete',
-                   reward_type='speed',
+                   reward_type='positive',
                    mode='none',
                    change_speed_interval=100,
                    )
@@ -24,7 +24,7 @@ def main():
         terminate = False
         while not terminate:
             # action = [float(input('next steering')), float(input('next vel_dif'))]
-            action = random.randint(0,8)
+            action = int(input())# random.randint(0,8)
             state, reward, terminate, info = env.step(action)
             time.sleep(0.1)
             if terminate:
