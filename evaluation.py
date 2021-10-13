@@ -118,9 +118,10 @@ def plot_evaluation_statistics(path_to_env_log, extention="*.pkl"):
     statistics_in_folder = []
     for filename in files:
         return_dict = plot_episode_stat(filename)
-        return_dict["weights"] =  decode_w_for_readable_names(params.get("model", ""), params["w"])
+        return_dict["weights"] = decode_w_for_readable_names(params.get("model", ""), params["w"])
         statistics_in_folder.append(return_dict)
     return statistics_in_folder
+
 
 def decode_w_for_readable_names(model_name, w):
     """
@@ -157,7 +158,8 @@ def decode_w_for_readable_names(model_name, w):
     else:
         w_string = str(w)
 
-    return  w_string
+    return w_string
+
 
 def draw_causes(cause_dicts, labels):
     """
@@ -192,6 +194,7 @@ def draw_causes(cause_dicts, labels):
               loc='lower left', fontsize='small')
     plt.tight_layout()
 
+
 def eval_full_statistics(global_statistics, save_figures_path=None):
     """
     Function to plot all the collected data.
@@ -214,9 +217,8 @@ def eval_full_statistics(global_statistics, save_figures_path=None):
         cause_list = []
         for i, item in enumerate(global_statistics):
             episode_stat = []
-            cause_dict = { "collision": 0, "slow": 0, None: 0}
+            cause_dict = {"collision": 0, "slow": 0, None: 0}
             for episode in item:
-
                 cause_dict[episode["cause"]] += 1
 
                 episode_stat.append(
@@ -266,8 +268,8 @@ def draw_boxplot(data, labels, names):
         # ax.annotate(names[i], (0.5, 0.9), xycoords='axes fraction', va='center', ha='center')
     plt.tight_layout()
 
-def fig_plot(data, title, names):
 
+def fig_plot(data, title, names):
     fig, axes = plt.subplots(data.__len__() // 2, 2, sharex=True, sharey=True, figsize=(8, 12))
     fig.suptitle(title)
     plt.autoscale()
