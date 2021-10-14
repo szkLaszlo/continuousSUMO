@@ -27,6 +27,7 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                           type_as="discrete",
                           reward_type='all',
                           mode='none',
+                          radar_range=None,
                           save_log_path=None,
                           change_speed_interval=100,
                           default_w=None,
@@ -89,7 +90,8 @@ class SUMOEnvironment(gym.Env):
         self._setup_observation_space(*radar_range)
         self._setup_action_space()
         self._setup_reward_system(reward_type=reward_type)
-        self.max_num_steps = 2
+        self._how_to_select_ego = 'by_name'
+        self.max_num_steps = 200
         self.rendering = True if mode == 'human' else False
 
         # Simulation data and constants
@@ -174,7 +176,7 @@ class SUMOEnvironment(gym.Env):
         self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
-        self.state['speed'] = self.desired_speed
+        self.state['speed'] = self.desired_speed if self.time_to_change_des_speed is not None else 0
 
         if "continuous" in self.type_as:
             self.lateral_model = LateralModel(
@@ -213,11 +215,18 @@ class SUMOEnvironment(gym.Env):
                 self.observation_space = gym.spaces.Discrete(self.observation_space.flatten().shape[0])
             # Assigning the environment call
             self._get_observation = self._convert_image_state_space_to_vector
+            self._get_basic_observation = self._calculate_structured_environment
 
         elif self.type_os == "structured":
             self.observation_space = gym.spaces.Discrete(18)
             # Assigning the environment call
             self._get_observation = self._convert_structural_state_space_to_vector
+            self._get_basic_observation = self._calculate_structured_environment
+
+        elif self.type_os == "merge":
+            self.observation_space = gym.spaces.Discrete(8)
+            self._get_observation = self._convert_merge_observation_to_vector
+            self._get_basic_observation = self._calculate_structured_environment
 
         else:
             raise RuntimeError("This type of observation space is not yet implemented.")
@@ -275,6 +284,7 @@ class SUMOEnvironment(gym.Env):
                                 # proportional negative
                                 'cut_in_distance': [False, 0.0, True],  # whenever cuts in closer then should.
                                 'type': reward_type}
+            self._get_rewards = self._calculate_highway_rewards
 
         elif reward_type == 'positive':
             self.reward_dict = {'success': [True, 0.0, True],  # if successful episode
@@ -290,6 +300,26 @@ class SUMOEnvironment(gym.Env):
                                 # proportional negative
                                 'cut_in_distance': [False, 1.0, True],  # whenever cuts in closer then should.
                                 'type': reward_type}
+            self._get_rewards = self._calculate_highway_rewards
+
+        elif reward_type == 'merge':
+            self.reward_dict = {
+                # if successful episode
+                'success': [True, 0.0, True],
+                # when causing collision
+                'collision': [True, -1.0, False],
+                # when being too slow
+                'slow': [False, -1.0, False],
+                # negative reward proportional to the difference from v_des
+                'speed': [False, 1.0, True],
+                # whenever closer than required follow distance,
+                # proportionally negative
+                'follow_distance': [False, 0.0, True],
+                # whenever cuts in closer then should.
+                'cut_in_distance': [False, 0.0, True],
+                'type': reward_type}
+
+            self._get_rewards = self._calculate_merge_rewards
         else:
             raise RuntimeError("Reward system can not be found")
 
@@ -320,7 +350,7 @@ class SUMOEnvironment(gym.Env):
 
     def render(self, mode="human"):
 
-        if self.render_mode == 'human':
+        if self.render_mode == 'plot':
             img = self._calculate_image_environment(False)
             img = img.transpose((1, 2, 0))
             if self.save_path is not None:
@@ -425,13 +455,13 @@ class SUMOEnvironment(gym.Env):
                                                                                           - self.ego_start_position,
                                                                               'lane_change': self.lanechange_counter}
             if self.rendering:
-                sleep(0.2)
+                sleep(0.05)
 
             traci.simulationStep()
             # getting termination values
             cause, reward, terminated = self._get_terminating_events(is_lane_change)
 
-            if self.steps_done % self.time_to_change_des_speed == 0:
+            if self.time_to_change_des_speed is not None and self.steps_done % self.time_to_change_des_speed == 0:
                 self._set_random_desired_speed()
 
             # creating the images if render is true.
@@ -480,7 +510,15 @@ class SUMOEnvironment(gym.Env):
             self.egoID = None
             self.observation = None
 
-        elif self.egoID in traci.vehicle.getIDList() and traci.vehicle.getSpeed(self.egoID) < (60 / 3.6):
+        elif self.egoID in traci.vehicle.getIDList() and \
+                (traci.vehicle.getSpeed(self.egoID) < (60 / 3.6) and self.reward_dict['slow'][0]):
+            cause = 'slow'
+            temp_reward['success'] = self.reward_dict[cause][1]
+            terminated = True
+            self.egoID = None
+            self.observation = None
+
+        elif self.reward_dict["type"] == "merge" and self.steps_done > self.max_num_steps:
             cause = 'slow'
             temp_reward['success'] = self.reward_dict[cause][1]
             terminated = True
@@ -496,36 +534,63 @@ class SUMOEnvironment(gym.Env):
             self.steps_done += 1
             self._refresh_environment()
 
-        if temp_reward.get("keep_right", [False, False, False])[2]:
-            if self.observation is not None:
-                temp_reward["keep_right"] = self.reward_dict["keep_right"][1] if self.observation["lane_id"] == 0 or (
-                        self.observation["ER"] == 1 and self.observation["RE"]["dv"] < 1) else \
-                    self.reward_dict["keep_right"][1] - 1
-            else:
-                if cause is not None:
-                    temp_reward["keep_right"] = self.reward_dict[cause][1]
-                else:
-                    temp_reward["keep_right"] = 0
+        temp_reward = self._get_rewards(cause, is_lane_change, temp_reward)
+        # constructing the reward vector
+        reward = self.get_max_reward(temp_reward) * self.default_w
 
-        if temp_reward.get("follow_distance", [False, False, False])[2]:
-            if self.observation is not None:
-                follow_time = (
-                        (self.observation["FE"]["dx"] + self.observation["FE"]["dv"] * self.dt) / self.observation[
-                    "speed"] * 2)
-                if follow_time < 1:
-                    temp_reward["follow_distance"] = max(self.reward_dict["follow_distance"][1] + follow_time - 1,
-                                                         self.reward_dict["follow_distance"][1] - 1)
-                else:
-                    temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
-            elif cause is None:
-                temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
-            else:
-                temp_reward["follow_distance"] = self.reward_dict[cause][1]
+        return cause, reward, terminated
 
+    def _calculate_merge_rewards(self, cause, is_lane_change, temp_reward):
+        # todo: handcrafted for this scenario. It should be resolved later
+        if self.egoID is not None:  # and "gneE8" not in traci.vehicle.getLaneID(self.egoID):
+            # calculating reward for following distance
+            temp_reward = self._calculate_follow_distance_reward(cause, temp_reward)
+            # calculating reward for cut in distance
+            temp_reward = self._calculate_cutin_reward(cause, temp_reward)
+        else:
+            temp_reward["cut_in_distance"] = temp_reward["cut_in_distance"][1]
+            temp_reward["follow_distance"] = temp_reward["follow_distance"][1]
+
+        # getting speed reward
+        temp_reward = self._calculate_speed_reward(cause, temp_reward)
+        return temp_reward
+
+    def _calculate_highway_rewards(self, cause, is_lane_change, temp_reward):
+        # calculating reward for keeping right
+        temp_reward = self._calculate_keep_right_reward(cause, temp_reward)
+        # calculating reward for following distance
+        temp_reward = self._calculate_follow_distance_reward(cause, temp_reward)
+        # calculating reward for cut in distance
+        temp_reward = self._calculate_cutin_reward(cause, temp_reward)
+        # getting speed reward
+        temp_reward = self._calculate_speed_reward(cause, temp_reward)
+        # getting lane change reward.
+        temp_reward = self._calculate_lanechange_reward(cause, is_lane_change, temp_reward)
+
+        return temp_reward
+
+    def _calculate_lanechange_reward(self, cause, is_lane_change, temp_reward):
+        if is_lane_change and cause is None:
+            temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
+        elif cause is None:
+            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] - 1
+        else:
+            temp_reward["lane_change"] = self.reward_dict[cause][1]
+        return temp_reward
+
+    def _calculate_speed_reward(self, cause, temp_reward):
+        if cause is None:
+            dv = abs(self.state['speed'] - self.desired_speed)
+            temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])
+        else:
+            temp_reward["speed"] = self.reward_dict[cause][1]
+        return temp_reward
+
+    def _calculate_cutin_reward(self, cause, temp_reward):
         if temp_reward.get("cut_in_distance", [False, False, False])[2]:
             if self.observation is not None:
                 follow_time = ((-1 * self.observation["RE"]["dx"] - self.observation["RE"]["dv"] * self.dt) /
-                               self.observation["speed"] * 2)
+                               (self.observation["speed"] + 0.0001) * 2)
                 if follow_time < 0.5:
                     temp_reward["cut_in_distance"] = max(
                         self.reward_dict["cut_in_distance"][1] + 2 * (follow_time - 0.5),
@@ -536,24 +601,37 @@ class SUMOEnvironment(gym.Env):
                 temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
             else:
                 temp_reward["cut_in_distance"] = self.reward_dict[cause][1]
+        return temp_reward
 
-        # getting speed reward
-        if cause is None:
-            dv = abs(self.state['speed'] - self.desired_speed)
-            temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])
-        else:
-            temp_reward["speed"] = self.reward_dict[cause][1]
-        # getting lane change reward.
-        if is_lane_change and cause is None:
-            temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
-        elif cause is None:
-            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] - 1
-        else:
-            temp_reward["lane_change"] = self.reward_dict[cause][1]
-        # constructing the reward vector
-        reward = self.get_max_reward(temp_reward) * self.default_w
+    def _calculate_follow_distance_reward(self, cause, temp_reward):
+        if temp_reward.get("follow_distance", [False, False, False])[2]:
+            if self.observation is not None:
+                follow_time = (
+                        (self.observation["FE"]["dx"] + self.observation["FE"]["dv"] * self.dt) / (
+                            self.observation["speed"] + 0.0001) * 2)
+                if follow_time < 1:
+                    temp_reward["follow_distance"] = max(self.reward_dict["follow_distance"][1] + follow_time - 1,
+                                                         self.reward_dict["follow_distance"][1] - 1)
+                else:
+                    temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
+            elif cause is None:
+                temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
+            else:
+                temp_reward["follow_distance"] = self.reward_dict[cause][1]
+        return temp_reward
 
-        return cause, reward, terminated
+    def _calculate_keep_right_reward(self, cause, temp_reward):
+        if temp_reward.get("keep_right", [False, False, False])[2]:
+            if self.observation is not None:
+                temp_reward["keep_right"] = self.reward_dict["keep_right"][1] if self.observation["lane_id"] == 0 or (
+                        self.observation["ER"] == 1 and self.observation["RE"]["dv"] < 1) else \
+                    self.reward_dict["keep_right"][1] - 1
+            else:
+                if cause is not None:
+                    temp_reward["keep_right"] = self.reward_dict[cause][1]
+                else:
+                    temp_reward["keep_right"] = 0
+        return temp_reward
 
     def _check_collision(self, env):
         """
@@ -573,6 +651,16 @@ class SUMOEnvironment(gym.Env):
                     return True
         return False
 
+    def is_simulation_ready_for_ego(self, id_list):
+        if self._how_to_select_ego == "last_in_lane":
+            ready = traci.simulation.getArrivedNumber() - 2 * traci.simulation.getCollidingVehiclesNumber() > 0 \
+                    and len(id_list) > self.min_departed_vehicles and self.egoID is None
+        elif self._how_to_select_ego == "by_name":
+            ready = any("ego" in idx for idx in id_list)
+        else:
+            ready = False
+        return ready
+
     def _select_egos(self, number_of_egos=1):
         """
         This selects the ego(s) from the environment. The ID of the cars are given back to the simulation
@@ -584,21 +672,9 @@ class SUMOEnvironment(gym.Env):
             # Collecting online vehicles
             IDsOfVehicles = traci.vehicle.getIDList()
             # Moving forward if ego can be inserted
-            if traci.simulation.getArrivedNumber() - 2 * traci.simulation.getCollidingVehiclesNumber() > 0 \
-                    and len(IDsOfVehicles) > self.min_departed_vehicles and self.egoID is None:
+            if self.is_simulation_ready_for_ego(IDsOfVehicles):
                 # Finding the last car on the highway
-                for carID in IDsOfVehicles:
-                    # todo: this search only works in the straight simulation
-                    if traci.vehicle.getPosition(carID)[0] < self.ego_start_position and \
-                            traci.vehicle.getSpeed(carID) > (62 / 3.6):
-                        # Saving ID and start position for ego vehicle
-                        self.egoID = carID
-                        self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0] - traci.vehicle.getLength(
-                            self.egoID) / 2
-                if self.egoID is None:
-                    self.egoID = IDsOfVehicles[-1]
-                    self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0] - traci.vehicle.getLength(
-                        self.egoID) / 2
+                self._select_ego_from_existing_vehicles(IDsOfVehicles)
 
                 # Setting ego simulation variables to be controlled by us (not SUMO)
                 traci.vehicle.setLaneChangeMode(self.egoID, 0x0)
@@ -606,21 +682,39 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setColor(self.egoID, (255, 0, 0))
                 # traci.vehicle.setType(self.egoID, 'ego')
 
-                traci.vehicle.setRouteID(self.egoID, "r1")
-
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
-                traci.vehicle.setSpeed(self.egoID, self.desired_speed)
+                traci.vehicle.setSpeed(self.egoID,
+                                       self.desired_speed if self.time_to_change_des_speed is not None else 12)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
                 traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
                                                varIDs=[tc.VAR_SPEED, tc.VAR_LANE_INDEX, tc.VAR_ANGLE, tc.VAR_POSITION,
                                                        tc.VAR_LENGTH, tc.VAR_WIDTH])
-                traci.junction.subscribeContext("C", tc.CMD_GET_VEHICLE_VARIABLE, dist=50)
                 self.free_ego_surroundings(IDsOfVehicles=IDsOfVehicles)
                 if self.rendering:
                     traci.gui.trackVehicle('View #0', self.egoID)
         else:
             traci.simulationStep()
+
+    def _select_ego_from_existing_vehicles(self, IDsOfVehicles):
+        if self._how_to_select_ego == "last_in_lane":
+            for carID in IDsOfVehicles:
+                # todo: this search only works in the straight simulation
+                if traci.vehicle.getPosition(carID)[0] < self.ego_start_position and \
+                        traci.vehicle.getSpeed(carID) > (62 / 3.6):
+                    # Saving ID and start position for ego vehicle
+                    self.egoID = carID
+
+        elif self._how_to_select_ego == "by_name":
+            for idx in IDsOfVehicles:
+                if 'ego' in idx:
+                    self.egoID = idx
+
+        if self.egoID is None:
+            self.egoID = IDsOfVehicles[-1]
+
+        self.ego_start_position = traci.vehicle.getPosition(self.egoID)[0] - traci.vehicle.getLength(
+            self.egoID) / 2
 
     def free_ego_surroundings(self, IDsOfVehicles):
         # Finding the last car on the highway
@@ -725,7 +819,7 @@ class SUMOEnvironment(gym.Env):
         -------
 
         """
-        self.observation, self.state = self._calculate_structured_environment()
+        self.observation, self.state = self._get_basic_observation()
 
     def _get_simulation_environment(self):
         """
@@ -841,7 +935,7 @@ class SUMOEnvironment(gym.Env):
                 else:
                     observation[state_key] = copy.copy(basic_vals)
             lane = {0: [], 1: [], 2: []}
-            # Calculating all the vehicle data
+            # Calculating all the vehicle data #todo: fix different observation types
             for car_id in self.env_obs.keys():
                 if car_id != self.egoID:
                     new_car = dict()
@@ -908,12 +1002,60 @@ class SUMOEnvironment(gym.Env):
 
         return observation, ego_state
 
+    def _calculate_merge_observation(self):
+        ego_state = self.env_obs.get(self.egoID, self.state)
+        obs = {}
+        if ego_state is not None:
+            obs["ego"] = ego_state
+            obs.setdefault("back", {"dx": -self.radar_range[0],
+                                    "dy": -self.radar_range[1],
+                                    "speed": 0.0})
+            obs.setdefault("front", {"dx": self.radar_range[0],
+                                     "dy": self.radar_range[1],
+                                     "speed": 0.0})
+            min_dist_back = -1000
+            min_dist_front = 1000
+            for idx, car in self.env_obs.items():
+                if "ego" in idx:
+                    continue
+                dist_from_ego_x = car["x_position"] - ego_state["x_position"]
+                dist_from_ego_y = car["y_position"] - ego_state["y_position"]
+                if car["lane_id"] == ego_state['lane_id'] and min_dist_back < dist_from_ego_x < min_dist_front:
+                    if dist_from_ego_x >= 0:
+                        obs["front"] = {"dx": dist_from_ego_x,
+                                        "dy": dist_from_ego_y,
+                                        "speed": car['speed']}
+
+                    elif dist_from_ego_x < 0:
+                        obs["back"] = {"dx": dist_from_ego_x,
+                                       "dy": dist_from_ego_y,
+                                       "speed": car['speed']}
+
+        return obs, ego_state
+
     def _convert_image_state_space_to_vector(self):
         if self.observation is not None:
             return self._calculate_image_environment()
         else:
             return self.observation_space if not self.flatten \
                 else np.asarray([0] * self.observation_space.n, dtype=np.float32)
+
+    def _convert_merge_observation_to_vector(self):
+        if self.observation is not None:
+            obs, ego = self._calculate_merge_observation()
+            observation = np.asarray(
+                [obs["back"]["dx"] / self.radar_range[0], obs["back"]["dy"] / self.radar_range[1],
+                 obs["back"]["speed"] / 50,
+                 obs["front"]["dx"] / self.radar_range[0], obs["front"]["dy"] / self.radar_range[1],
+                 obs["front"]["speed"] / 50,
+                 ego["speed"] / 50,
+                 self.desired_speed / 50,
+                 ])
+
+        else:
+            observation = np.asarray([0] * self.observation_space.n, dtype=np.float32)
+
+        return observation
 
     def _convert_structural_state_space_to_vector(self):
         obs_vector = []
