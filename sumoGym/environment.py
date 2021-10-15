@@ -262,10 +262,10 @@ class SUMOEnvironment(gym.Env):
         if reward_type == "basic":
             raise NotImplementedError
         elif reward_type == 'features':
-            self.reward_dict = {'success': [True, 0.0, False],  # if successful episode
-                                'collision': [True, -100.0, False],  # when causing collision
-                                'slow': [True, -100.0, False],  # when being too slow
-                                'left_highway': [True, -100.0, False],  # when leaving highway
+            self.reward_dict = {'success': [True, 0.0, True],  # if successful episode
+                                'collision': [True, -10.0, False],  # when causing collision
+                                'slow': [True, -10.0, False],  # when being too slow
+                                'left_highway': [True, -10.0, False],  # when leaving highway
                                 'speed': [False, 0.0, True],
                                 # negative reward proportional to the difference from v_des
                                 'lane_change': [False, 0.0, True],  # successful lane-change
@@ -278,9 +278,9 @@ class SUMOEnvironment(gym.Env):
 
         elif reward_type == 'positive':
             self.reward_dict = {'success': [True, 0.0, True],  # if successful episode
-                                'collision': [True, -1.0, False],  # when causing collision
-                                'slow': [True, -1.0, False],  # when being too slow
-                                'left_highway': [True, -1.0, False],  # when leaving highway
+                                'collision': [True, -10.0, False],  # when causing collision
+                                'slow': [True, -10.0, False],  # when being too slow
+                                'left_highway': [True, -10.0, False],  # when leaving highway
                                 'speed': [False, 1.0, True],
                                 # negative reward proportional to the difference from v_des
                                 'lane_change': [False, 1.0, True],  # successful lane-change
