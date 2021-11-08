@@ -505,7 +505,7 @@ class SUMOEnvironment(gym.Env):
                 if cause is not None:
                     temp_reward["keep_right"] = self.reward_dict[cause][1]
                 else:
-                    temp_reward["keep_right"] = 0
+                    temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
 
         if temp_reward.get("follow_distance", [False, False, False])[2]:
             if self.observation is not None:
@@ -520,7 +520,7 @@ class SUMOEnvironment(gym.Env):
             elif cause is None:
                 temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
             else:
-                temp_reward["follow_distance"] = self.reward_dict[cause][1]
+                temp_reward["follow_distance"] = 0 if temp_reward["type"] == "positive" else -1
 
         if temp_reward.get("cut_in_distance", [False, False, False])[2]:
             if self.observation is not None:
@@ -535,21 +535,21 @@ class SUMOEnvironment(gym.Env):
             elif cause is None:
                 temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
             else:
-                temp_reward["cut_in_distance"] = self.reward_dict[cause][1]
+                temp_reward["cut_in_distance"] = 0 if temp_reward["type"] == "positive" else -1
 
         # getting speed reward
         if cause is None:
             dv = abs(self.state['speed'] - self.desired_speed)
             temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])
         else:
-            temp_reward["speed"] = self.reward_dict[cause][1]
+            temp_reward["speed"] = 0 if temp_reward["type"] == "positive" else -1
         # getting lane change reward.
         if is_lane_change and cause is None:
             temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
         elif cause is None:
             temp_reward["lane_change"] = self.reward_dict["lane_change"][1] - 1
         else:
-            temp_reward["lane_change"] = self.reward_dict[cause][1]
+            temp_reward["lane_change"] = 0 if temp_reward["type"] == "positive" else -1
         # constructing the reward vector
         reward = self.get_max_reward(temp_reward) * self.default_w
 
