@@ -503,7 +503,7 @@ class SUMOEnvironment(gym.Env):
                     self.reward_dict["keep_right"][1] - 1
             else:
                 if cause is not None:
-                    temp_reward["keep_right"] = self.reward_dict[cause][1]
+                    temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
                 else:
                     temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
 
@@ -546,8 +546,10 @@ class SUMOEnvironment(gym.Env):
         # getting lane change reward.
         if is_lane_change and cause is None:
             temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
+        # not terminating move reward
         elif cause is None:
-            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] - 1
+            temp_reward["lane_change"] = 0 if temp_reward["type"] == "positive" else -1
+        # terminating reward
         else:
             temp_reward["lane_change"] = 0 if temp_reward["type"] == "positive" else -1
         # constructing the reward vector
