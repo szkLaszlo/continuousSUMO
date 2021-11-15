@@ -174,8 +174,8 @@ class SUMOEnvironment(gym.Env):
         self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
-        self.state['speed'] = self.desired_speed
-
+        self.state['speed'] = (self.desired_speed+self.state['speed'])/2
+                
         if "continuous" in self.type_as:
             self.lateral_model = LateralModel(
                 self.state,
@@ -611,7 +611,7 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setRouteID(self.egoID, "r1")
 
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
-                traci.vehicle.setSpeed(self.egoID, self.desired_speed)
+                traci.vehicle.setSpeed(self.egoID, (traci.vehicle.getSpeed(self.egoID)+self.desired_speed)/2)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
                 traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
