@@ -310,9 +310,9 @@ class SUMOEnvironment(gym.Env):
                 # when causing collision
                 'collision': [True, -10 ** 6, False],
                 # when being too slow
-                'slow': [False, -1.0, False],
+                'slow': [False, 0.0, False],
                 # negative reward proportional to the difference from v_des
-                'speed': [False, 1.0, True],
+                'speed': [False, 0.0, False],
                 # negative reward proportional to speeding
                 'speeding': [False, 0.0, True],
                 # negative reward proportional to speeding
@@ -569,7 +569,7 @@ class SUMOEnvironment(gym.Env):
     def _calculate_distance_reward(self, cause, temp_reward):
         assert temp_reward.get('completion', None) is not None
         current_driven_kms = traci.vehicle.getDistance(self.egoID)
-        reward = (current_driven_kms - self.last_driven_kms) / self.total_driving_distance
+        reward = (current_driven_kms - self.last_driven_kms) / self.total_driving_distance * 100
         self.last_driven_kms = current_driven_kms
         temp_reward['completion'] = reward
         return temp_reward
