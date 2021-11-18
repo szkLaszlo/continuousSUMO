@@ -176,7 +176,7 @@ class SUMOEnvironment(gym.Env):
         self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
-        self.state['speed'] = self.desired_speed if self.time_to_change_des_speed is not None else 0
+        self.state['speed'] = (self.desired_speed+self.state['speed'])/2 if self.time_to_change_des_speed is not None else 0
 
         if "continuous" in self.type_as:
             self.lateral_model = LateralModel(
@@ -271,10 +271,10 @@ class SUMOEnvironment(gym.Env):
         if reward_type == "basic":
             raise NotImplementedError
         elif reward_type == 'features':
-            self.reward_dict = {'success': [True, 0.0, False],  # if successful episode
-                                'collision': [True, -100.0, False],  # when causing collision
-                                'slow': [True, -100.0, False],  # when being too slow
-                                'left_highway': [True, -100.0, False],  # when leaving highway
+            self.reward_dict = {'success': [True, 0.0, True],  # if successful episode
+                                'collision': [True, -10.0, False],  # when causing collision
+                                'slow': [True, -10.0, False],  # when being too slow
+                                'left_highway': [True, -10.0, False],  # when leaving highway
                                 'speed': [False, 0.0, True],
                                 # negative reward proportional to the difference from v_des
                                 'lane_change': [False, 0.0, True],  # successful lane-change
@@ -288,9 +288,9 @@ class SUMOEnvironment(gym.Env):
 
         elif reward_type == 'positive':
             self.reward_dict = {'success': [True, 0.0, True],  # if successful episode
-                                'collision': [True, -1.0, False],  # when causing collision
-                                'slow': [True, -1.0, False],  # when being too slow
-                                'left_highway': [True, -1.0, False],  # when leaving highway
+                                'collision': [True, -10.0, False],  # when causing collision
+                                'slow': [True, -10.0, False],  # when being too slow
+                                'left_highway': [True, -10.0, False],  # when leaving highway
                                 'speed': [False, 1.0, True],
                                 # negative reward proportional to the difference from v_des
                                 'lane_change': [False, 1.0, True],  # successful lane-change
@@ -590,7 +590,7 @@ class SUMOEnvironment(gym.Env):
         if temp_reward.get("cut_in_distance", [False, False, False])[2]:
             if self.observation is not None:
                 follow_time = ((-1 * self.observation["RE"]["dx"] - self.observation["RE"]["dv"] * self.dt) /
-                               (self.observation["speed"] + 0.0001) * 2)
+                               (self.observation["speed"] + 0.0001) * 2)  # adding constant for numerical stability
                 if follow_time < 0.5:
                     temp_reward["cut_in_distance"] = max(
                         self.reward_dict["cut_in_distance"][1] + 2 * (follow_time - 0.5),
@@ -600,15 +600,15 @@ class SUMOEnvironment(gym.Env):
             elif cause is None:
                 temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
             else:
-                temp_reward["cut_in_distance"] = self.reward_dict[cause][1]
+                temp_reward["cut_in_distance"] = 0 if temp_reward["type"] == "positive" else -1
         return temp_reward
 
     def _calculate_follow_distance_reward(self, cause, temp_reward):
         if temp_reward.get("follow_distance", [False, False, False])[2]:
             if self.observation is not None:
                 follow_time = (
-                        (self.observation["FE"]["dx"] + self.observation["FE"]["dv"] * self.dt) / (
-                            self.observation["speed"] + 0.0001) * 2)
+                        (self.observation["FE"]["dx"] + self.observation["FE"]["dv"] * self.dt) /
+                        (self.observation["speed"] + 0.0001) * 2)  # adding constant for numerical stability
                 if follow_time < 1:
                     temp_reward["follow_distance"] = max(self.reward_dict["follow_distance"][1] + follow_time - 1,
                                                          self.reward_dict["follow_distance"][1] - 1)
@@ -617,7 +617,7 @@ class SUMOEnvironment(gym.Env):
             elif cause is None:
                 temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
             else:
-                temp_reward["follow_distance"] = self.reward_dict[cause][1]
+                temp_reward["follow_distance"] = 0 if temp_reward["type"] == "positive" else -1
         return temp_reward
 
     def _calculate_keep_right_reward(self, cause, temp_reward):
@@ -628,9 +628,10 @@ class SUMOEnvironment(gym.Env):
                     self.reward_dict["keep_right"][1] - 1
             else:
                 if cause is not None:
-                    temp_reward["keep_right"] = self.reward_dict[cause][1]
+                    temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
                 else:
-                    temp_reward["keep_right"] = 0
+                    temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
+
         return temp_reward
 
     def _check_collision(self, env):
@@ -680,11 +681,9 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setLaneChangeMode(self.egoID, 0x0)
                 traci.vehicle.setSpeedMode(self.egoID, 0x0)
                 traci.vehicle.setColor(self.egoID, (255, 0, 0))
-                # traci.vehicle.setType(self.egoID, 'ego')
 
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
-                traci.vehicle.setSpeed(self.egoID,
-                                       self.desired_speed if self.time_to_change_des_speed is not None else 12)
+                traci.vehicle.setSpeed(self.egoID, (traci.vehicle.getSpeed(self.egoID)+self.desired_speed)/2 if self.time_to_change_des_speed is not None else 0)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
                 traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
