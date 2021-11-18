@@ -176,8 +176,7 @@ class SUMOEnvironment(gym.Env):
         self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
-        self.state['speed'] = (self.desired_speed + self.state[
-            'speed']) / 2 if self.time_to_change_des_speed is not None else 0
+        self.state['speed'] = (self.desired_speed + self.state['speed']) / 2
 
         if "continuous" in self.type_as:
             self.lateral_model = LateralModel(
@@ -225,7 +224,7 @@ class SUMOEnvironment(gym.Env):
             self._get_basic_observation = self._calculate_structured_environment
 
         elif self.type_os == "merge":
-            self.observation_space = gym.spaces.Discrete(10)
+            self.observation_space = gym.spaces.Discrete(11)
             self._get_observation = self._convert_merge_observation_to_vector
             self._get_basic_observation = self._calculate_structured_environment
 
@@ -569,7 +568,7 @@ class SUMOEnvironment(gym.Env):
     def _calculate_distance_reward(self, cause, temp_reward):
         assert temp_reward.get('completion', None) is not None
         current_driven_kms = traci.vehicle.getDistance(self.egoID)
-        reward = (current_driven_kms - self.last_driven_kms) / self.total_driving_distance * 100
+        reward = (current_driven_kms - self.last_driven_kms) / 1000
         self.last_driven_kms = current_driven_kms
         temp_reward['completion'] = reward
         return temp_reward
@@ -710,7 +709,7 @@ class SUMOEnvironment(gym.Env):
 
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
                 traci.vehicle.setSpeed(self.egoID, (traci.vehicle.getSpeed(
-                    self.egoID) + self.desired_speed) / 2 if self.time_to_change_des_speed is not None else 0)
+                    self.egoID) + self.desired_speed) / 2)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
                 traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
@@ -1090,7 +1089,8 @@ class SUMOEnvironment(gym.Env):
                  ego["speed"] / 50,
                  ego["desired_speed"] / 50,
                  ego["speed_limit"] / 50,
-                 ego["route"]
+                 ego["route"],
+                 self.steps_done / self.max_num_steps
                  ])
 
         else:
