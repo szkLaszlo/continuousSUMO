@@ -225,7 +225,7 @@ class SUMOEnvironment(gym.Env):
             self._get_basic_observation = self._calculate_structured_environment
 
         elif self.type_os == "merge":
-            self.observation_space = gym.spaces.Discrete(9)
+            self.observation_space = gym.spaces.Discrete(10)
             self._get_observation = self._convert_merge_observation_to_vector
             self._get_basic_observation = self._calculate_structured_environment
 
@@ -1065,7 +1065,8 @@ class SUMOEnvironment(gym.Env):
                                        "dy": dist_from_ego_y,
                                        "speed": car['speed']}
             ego_state.update({'desired_speed': self.desired_speed,
-                              'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID))})
+                              'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID)),
+                              'route': traci.vehicle.getDistance(self.egoID)/self.total_driving_distance})
 
         return obs, ego_state
 
@@ -1089,6 +1090,7 @@ class SUMOEnvironment(gym.Env):
                  ego["speed"] / 50,
                  ego["desired_speed"] / 50,
                  ego["speed_limit"] / 50,
+                 ego["route"]
                  ])
 
         else:
