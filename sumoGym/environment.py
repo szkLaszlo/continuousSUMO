@@ -176,7 +176,8 @@ class SUMOEnvironment(gym.Env):
         self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
-        self.state['speed'] = (self.desired_speed+self.state['speed'])/2 if self.time_to_change_des_speed is not None else 0
+        self.state['speed'] = (self.desired_speed + self.state[
+            'speed']) / 2 if self.time_to_change_des_speed is not None else 0
 
         if "continuous" in self.type_as:
             self.lateral_model = LateralModel(
@@ -224,7 +225,7 @@ class SUMOEnvironment(gym.Env):
             self._get_basic_observation = self._calculate_structured_environment
 
         elif self.type_os == "merge":
-            self.observation_space = gym.spaces.Discrete(8)
+            self.observation_space = gym.spaces.Discrete(9)
             self._get_observation = self._convert_merge_observation_to_vector
             self._get_basic_observation = self._calculate_structured_environment
 
@@ -307,16 +308,20 @@ class SUMOEnvironment(gym.Env):
                 # if successful episode
                 'success': [True, 0.0, True],
                 # when causing collision
-                'collision': [True, -1.0, False],
+                'collision': [True, -10 ** 6, False],
                 # when being too slow
                 'slow': [False, -1.0, False],
                 # negative reward proportional to the difference from v_des
                 'speed': [False, 1.0, True],
+                # negative reward proportional to speeding
+                'speeding': [False, 0.0, True],
+                # negative reward proportional to speeding
+                'completion': [False, 0.0, True],
                 # whenever closer than required follow distance,
                 # proportionally negative
-                'follow_distance': [False, 0.0, True],
+                'follow_distance': [False, 0.0, False],
                 # whenever cuts in closer then should.
-                'cut_in_distance': [False, 0.0, True],
+                'cut_in_distance': [False, 0.0, False],
                 'type': reward_type}
 
             self._get_rewards = self._calculate_merge_rewards
@@ -347,6 +352,7 @@ class SUMOEnvironment(gym.Env):
         self.lane_change_counter = 0
         self.ego_start_position = 10000  # used for result display
         self.lanechange_counter = 0
+        self.last_driven_kms = 0
 
     def render(self, mode="human"):
 
@@ -547,12 +553,36 @@ class SUMOEnvironment(gym.Env):
             temp_reward = self._calculate_follow_distance_reward(cause, temp_reward)
             # calculating reward for cut in distance
             temp_reward = self._calculate_cutin_reward(cause, temp_reward)
+            # calculating reward for distance travelled
+            temp_reward = self._calculate_distance_reward(cause, temp_reward)
+            # calculating reward for speeding
+            temp_reward = self._calculate_speeding_reward(cause, temp_reward)
+
         else:
             temp_reward["cut_in_distance"] = temp_reward["cut_in_distance"][1]
             temp_reward["follow_distance"] = temp_reward["follow_distance"][1]
 
         # getting speed reward
         temp_reward = self._calculate_speed_reward(cause, temp_reward)
+        return temp_reward
+
+    def _calculate_distance_reward(self, cause, temp_reward):
+        assert temp_reward.get('completion', None) is not None
+        current_driven_kms = traci.vehicle.getDistance(self.egoID)
+        reward = (current_driven_kms - self.last_driven_kms) / self.total_driving_distance
+        self.last_driven_kms = current_driven_kms
+        temp_reward['completion'] = reward
+        return temp_reward
+
+    def _calculate_speeding_reward(self, cause, temp_reward):
+        assert temp_reward.get('speeding', None) is not None
+        cur_speed = traci.vehicle.getSpeed(self.egoID)  # in m/s
+        lane_speed = traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID))  # in m/s
+        speeding = cur_speed - lane_speed
+        if speeding > 0:
+            temp_reward['speeding'] = temp_reward['speeding'][1] - speeding / lane_speed
+        else:
+            temp_reward['speeding'] = temp_reward['speeding'][1]
         return temp_reward
 
     def _calculate_highway_rewards(self, cause, is_lane_change, temp_reward):
@@ -570,23 +600,22 @@ class SUMOEnvironment(gym.Env):
         return temp_reward
 
     def _calculate_lanechange_reward(self, cause, is_lane_change, temp_reward):
+        assert temp_reward.get('lane_change', None) is not None
         if is_lane_change and cause is None:
             temp_reward["lane_change"] = self.reward_dict["lane_change"][1]
-        elif cause is None:
-            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] - 1
         else:
-            temp_reward["lane_change"] = self.reward_dict[cause][1]
+            temp_reward["lane_change"] = self.reward_dict["lane_change"][1] - 1
+
         return temp_reward
 
     def _calculate_speed_reward(self, cause, temp_reward):
-        if cause is None:
-            dv = abs(self.state['speed'] - self.desired_speed)
-            temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])
-        else:
-            temp_reward["speed"] = self.reward_dict[cause][1]
+        assert temp_reward.get('speed', None) is not None
+        dv = abs(self.state['speed'] - self.desired_speed)
+        temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])
         return temp_reward
 
     def _calculate_cutin_reward(self, cause, temp_reward):
+        assert temp_reward.get('cut_in_distance', None) is not None
         if temp_reward.get("cut_in_distance", [False, False, False])[2]:
             if self.observation is not None:
                 follow_time = ((-1 * self.observation["RE"]["dx"] - self.observation["RE"]["dv"] * self.dt) /
@@ -597,13 +626,13 @@ class SUMOEnvironment(gym.Env):
                         self.reward_dict["cut_in_distance"][1] - 1)
                 else:
                     temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
-            elif cause is None:
-                temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
             else:
-                temp_reward["cut_in_distance"] = 0 if temp_reward["type"] == "positive" else -1
+                temp_reward["cut_in_distance"] = self.reward_dict["cut_in_distance"][1]
+
         return temp_reward
 
     def _calculate_follow_distance_reward(self, cause, temp_reward):
+        assert temp_reward.get('follow_distance', None) is not None
         if temp_reward.get("follow_distance", [False, False, False])[2]:
             if self.observation is not None:
                 follow_time = (
@@ -614,23 +643,20 @@ class SUMOEnvironment(gym.Env):
                                                          self.reward_dict["follow_distance"][1] - 1)
                 else:
                     temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
-            elif cause is None:
-                temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
             else:
-                temp_reward["follow_distance"] = 0 if temp_reward["type"] == "positive" else -1
+                temp_reward["follow_distance"] = self.reward_dict["follow_distance"][1]
+
         return temp_reward
 
     def _calculate_keep_right_reward(self, cause, temp_reward):
+        assert temp_reward.get('keep_right', None) is not None
         if temp_reward.get("keep_right", [False, False, False])[2]:
             if self.observation is not None:
                 temp_reward["keep_right"] = self.reward_dict["keep_right"][1] if self.observation["lane_id"] == 0 or (
                         self.observation["ER"] == 1 and self.observation["RE"]["dv"] < 1) else \
                     self.reward_dict["keep_right"][1] - 1
             else:
-                if cause is not None:
-                    temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
-                else:
-                    temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
+                temp_reward["keep_right"] = 0 if temp_reward["type"] == "positive" else -1
 
         return temp_reward
 
@@ -683,13 +709,22 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setColor(self.egoID, (255, 0, 0))
 
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
-                traci.vehicle.setSpeed(self.egoID, (traci.vehicle.getSpeed(self.egoID)+self.desired_speed)/2 if self.time_to_change_des_speed is not None else 0)
+                traci.vehicle.setSpeed(self.egoID, (traci.vehicle.getSpeed(
+                    self.egoID) + self.desired_speed) / 2 if self.time_to_change_des_speed is not None else 0)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
                 traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
                                                varIDs=[tc.VAR_SPEED, tc.VAR_LANE_INDEX, tc.VAR_ANGLE, tc.VAR_POSITION,
                                                        tc.VAR_LENGTH, tc.VAR_WIDTH])
                 self.free_ego_surroundings(IDsOfVehicles=IDsOfVehicles)
+
+                # calculating travel distance based on the current route
+                final_edge = traci.vehicle.getRoute(self.egoID)[-1]
+                final_pos = traci.lane.getLength(f"{final_edge}_0")
+                self.total_driving_distance = traci.vehicle.getDrivingDistance(self.egoID, final_edge,
+                                                                               final_pos) if "merge" in \
+                                                                                             self.reward_dict[
+                                                                                                 "type"] else 0.0
                 if self.rendering:
                     traci.gui.trackVehicle('View #0', self.egoID)
         else:
@@ -1029,6 +1064,8 @@ class SUMOEnvironment(gym.Env):
                         obs["back"] = {"dx": dist_from_ego_x,
                                        "dy": dist_from_ego_y,
                                        "speed": car['speed']}
+            ego_state.update({'desired_speed': self.desired_speed,
+                              'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID))})
 
         return obs, ego_state
 
@@ -1043,12 +1080,15 @@ class SUMOEnvironment(gym.Env):
         if self.observation is not None:
             obs, ego = self._calculate_merge_observation()
             observation = np.asarray(
-                [obs["back"]["dx"] / self.radar_range[0], obs["back"]["dy"] / self.radar_range[1],
+                [obs["back"]["dx"] / self.radar_range[0],
+                 obs["back"]["dy"] / self.radar_range[1],
                  obs["back"]["speed"] / 50,
-                 obs["front"]["dx"] / self.radar_range[0], obs["front"]["dy"] / self.radar_range[1],
+                 obs["front"]["dx"] / self.radar_range[0],
+                 obs["front"]["dy"] / self.radar_range[1],
                  obs["front"]["speed"] / 50,
                  ego["speed"] / 50,
-                 self.desired_speed / 50,
+                 ego["desired_speed"] / 50,
+                 ego["speed_limit"] / 50,
                  ])
 
         else:
@@ -1071,6 +1111,7 @@ class SUMOEnvironment(gym.Env):
                 elif isinstance(value, dict):
                     for iddx, item in value.items():
                         obs_vector.append(item / 50)
+
             assert max(obs_vector) <= 1 and min(obs_vector) >= -1
 
         else:

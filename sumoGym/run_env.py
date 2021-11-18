@@ -5,6 +5,8 @@ import random
 import time
 
 import gym
+
+
 # This import must not be removed: import continuousSUMO.sumoGym.environment
 import continuousSUMO.sumoGym.environment
 import matplotlib.pyplot as plt
@@ -13,18 +15,17 @@ import matplotlib.pyplot as plt
 def main():
     # Modify simulation_directory for your directory path
     env = gym.make('SUMOEnvironment-v0',
-                   simulation_directory='../basic_env',
-                   type_os="structured",
-                   type_as='discrete',
-                   reward_type='positive',
-                   mode='none',
-                   change_speed_interval=100,
+                   simulation_directory='../../fastcl/sumo_simulations',
+                   type_os="merge",
+                   type_as='discrete_longitudinal',
+                   reward_type='merge',
+                   mode='human',
+                   change_speed_interval=1000,
                    )
     while True:
         terminate = False
         while not terminate:
-            # action = [float(input('next steering')), float(input('next vel_dif'))]
-            action = int(input())# random.randint(0,8)
+            action = random.randint(0, env.action_space.n-1)
             state, reward, terminate, info = env.step(action)
             time.sleep(0.1)
             if terminate:
