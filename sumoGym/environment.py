@@ -318,9 +318,9 @@ class SUMOEnvironment(gym.Env):
                 'completion': [False, 0.0, True],
                 # whenever closer than required follow distance,
                 # proportionally negative
-                'follow_distance': [False, 0.0, False],
+                'follow_distance': [False, 0.0, True],
                 # whenever cuts in closer then should.
-                'cut_in_distance': [False, 0.0, False],
+                'cut_in_distance': [False, 0.0, True],
                 'type': reward_type}
 
             self._get_rewards = self._calculate_merge_rewards
