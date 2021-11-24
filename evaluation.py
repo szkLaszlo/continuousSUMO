@@ -118,7 +118,7 @@ def plot_evaluation_statistics(path_to_env_log, extention="*.pkl"):
     statistics_in_folder = []
     for filename in files:
         return_dict = plot_episode_stat(filename)
-        return_dict["weights"] =  decode_w_for_readable_names(params.get("model", ""), params["w"])
+        return_dict["weights"] =  decode_w_for_readable_names(params.get("model_version", ""), params["w"])
         statistics_in_folder.append(return_dict)
     return statistics_in_folder
 
@@ -142,7 +142,7 @@ def decode_w_for_readable_names(model_name, w):
         w_string = "Safe follower"
     elif w == [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]:
         w_string = "No cut-in driver"
-    elif w == [1.0, 1.0, 0.0, 0.1, 0.5, 1.0]:
+    elif w == [1.0, 1.0, -0.5, 0.5, 0.5, 0.5]:
         w_string = name + " Baseline"
     elif w == [1.0, 2.0, 0.0, 0.0, 0.5, 1.0]:
         w_string = "D"
@@ -152,7 +152,7 @@ def decode_w_for_readable_names(model_name, w):
         w_string = "B"
     elif w == [10.0, 2.0, -0.1, -0.5, 0.5, 1.0]:
         w_string = "A"
-    elif w == [1.0, 1.0, 0.0, 1.0, 1.0, 1.0]:
+    elif w == [1.0, 1.0, -0.5, 0.5, 0.5, 0.5]:
         w_string = "all but lc"
     else:
         w_string = str(w)
@@ -277,8 +277,11 @@ def fig_plot(data, title, names):
 
 if __name__ == "__main__":
     dir_of_eval = [
-        "/cache/RL/training_with_policy/FastRLv1_SuMoGyM_discrete/tits/"
-    ]
+        #"/cache/plotting/20211018_080302",
+        #"/cache/plotting/20211122_075322",
+        "/cache/plotting/compare",
+        ]
+    import time
     for run in dir_of_eval:
         global_stat = []
         eval_dirs = os.listdir(run)
@@ -289,4 +292,4 @@ if __name__ == "__main__":
             single_stat = plot_evaluation_statistics(os.path.join(run, dir_, "env"))
             global_stat.append(single_stat)
         eval_full_statistics(global_stat,
-                             )  # save_figures_path=os.path.join(dir_of_eval, f"plots_{time.strftime('%Y%m%d_%H%M%S', time.gmtime())}"))
+                             save_figures_path=os.path.join(run, f"plots_{time.strftime('%Y%m%d_%H%M%S', time.gmtime())}"))
