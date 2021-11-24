@@ -118,9 +118,18 @@ def plot_evaluation_statistics(path_to_env_log, extention="*.pkl"):
     statistics_in_folder = []
     for filename in files:
         return_dict = plot_episode_stat(filename)
-        return_dict["weights"] =  decode_w_for_readable_names(params.get("model_version", ""), params["w"])
+        model_name = ""
+        model_version = params.get('model_version', "")
+        use_double = params.get('use_double_model', False)
+        if model_version is not None:
+            if model_version in 'v1':
+                model_name = "DFRL agent" if use_double else 'FastRL agent'
+            elif model_version in 'q':
+                model_name = 'Q agent'
+        return_dict["weights"] = decode_w_for_readable_names(model_name=model_name, w=params["w"])
         statistics_in_folder.append(return_dict)
     return statistics_in_folder
+
 
 def decode_w_for_readable_names(model_name, w):
     """
@@ -129,7 +138,7 @@ def decode_w_for_readable_names(model_name, w):
     :param w: weights of the preferences
     :return: decoded name
     """
-    name = "FastRL" if model_name in "v1" else "Q"
+
     if w == [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]:
         w_string = "Safe"
     elif w == [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]:
@@ -143,21 +152,22 @@ def decode_w_for_readable_names(model_name, w):
     elif w == [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]:
         w_string = "No cut-in driver"
     elif w == [1.0, 1.0, -0.5, 0.5, 0.5, 0.5]:
-        w_string = name + " Baseline"
-    elif w == [1.0, 2.0, 0.0, 0.0, 0.5, 1.0]:
-        w_string = "D"
-    elif w == [1.0, 0.0, -0.1, -0.1, 1.0, 1.0]:
-        w_string = "C"
-    elif w == [1.0, 2.0, -0.1, -0.5, 1.0, 1.0]:
-        w_string = "B"
-    elif w == [10.0, 2.0, -0.1, -0.5, 0.5, 1.0]:
-        w_string = "A"
+        w_string = model_name + " Baseline"
+    elif w == [1.0, 0.0, -0.5, -0.5, 1.0, 1.0]:
+        w_string = model_name + " D"
+    elif w == [1.0, 1.0, 0.5, 0.0, 1.0, 1.0]:
+        w_string = model_name + " C"
+    elif w == [1.0, 1.0, 0.0, 0.0, 1.0, 1.0]:
+        w_string = model_name + " B"
+    elif w == [1.0, 1.0, -0.5, 0.0, 1.0, 1.0]:
+        w_string = model_name + " A"
     elif w == [1.0, 1.0, -0.5, 0.5, 0.5, 0.5]:
         w_string = "all but lc"
     else:
         w_string = str(w)
 
-    return  w_string
+    return w_string
+
 
 def draw_causes(cause_dicts, labels):
     """
@@ -192,6 +202,7 @@ def draw_causes(cause_dicts, labels):
               loc='lower left', fontsize='small')
     plt.tight_layout()
 
+
 def eval_full_statistics(global_statistics, save_figures_path=None):
     """
     Function to plot all the collected data.
@@ -214,9 +225,8 @@ def eval_full_statistics(global_statistics, save_figures_path=None):
         cause_list = []
         for i, item in enumerate(global_statistics):
             episode_stat = []
-            cause_dict = { "collision": 0, "slow": 0, None: 0}
+            cause_dict = {"collision": 0, "slow": 0, None: 0}
             for episode in item:
-
                 cause_dict[episode["cause"]] += 1
 
                 episode_stat.append(
@@ -266,8 +276,8 @@ def draw_boxplot(data, labels, names):
         # ax.annotate(names[i], (0.5, 0.9), xycoords='axes fraction', va='center', ha='center')
     plt.tight_layout()
 
-def fig_plot(data, title, names):
 
+def fig_plot(data, title, names):
     fig, axes = plt.subplots(data.__len__() // 2, 2, sharex=True, sharey=True, figsize=(8, 12))
     fig.suptitle(title)
     plt.autoscale()
@@ -277,11 +287,12 @@ def fig_plot(data, title, names):
 
 if __name__ == "__main__":
     dir_of_eval = [
-        #"/cache/plotting/20211018_080302",
-        #"/cache/plotting/20211122_075322",
+        # "/cache/plotting/20211018_080302",
+        # "/cache/plotting/20211122_075322",
         "/cache/plotting/compare",
-        ]
+    ]
     import time
+
     for run in dir_of_eval:
         global_stat = []
         eval_dirs = os.listdir(run)
@@ -292,4 +303,5 @@ if __name__ == "__main__":
             single_stat = plot_evaluation_statistics(os.path.join(run, dir_, "env"))
             global_stat.append(single_stat)
         eval_full_statistics(global_stat,
-                             save_figures_path=os.path.join(run, f"plots_{time.strftime('%Y%m%d_%H%M%S', time.gmtime())}"))
+                             save_figures_path=os.path.join(run,
+                                                            f"plots_{time.strftime('%Y%m%d_%H%M%S', time.gmtime())}"))
