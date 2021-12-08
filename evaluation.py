@@ -123,9 +123,9 @@ def plot_evaluation_statistics(path_to_env_log, extention="*.pkl"):
         use_double = params.get('use_double_model', False)
         if model_version is not None:
             if model_version in 'v1':
-                model_name = "DFRL agent" if use_double else 'FastRL agent'
+                model_name = "DFRL -" if use_double else 'FastRL -'
             elif model_version in 'q':
-                model_name = 'Q agent'
+                model_name = 'Q - '
         return_dict["weights"] = decode_w_for_readable_names(model_name=model_name, w=params["w"])
         statistics_in_folder.append(return_dict)
     return statistics_in_folder
@@ -152,7 +152,7 @@ def decode_w_for_readable_names(model_name, w):
     elif w == [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]:
         w_string = "No cut-in driver"
     elif w == [1.0, 1.0, -0.5, 0.5, 0.5, 0.5]:
-        w_string = model_name + " Baseline"
+        w_string = model_name + " baseline"
     elif w == [1.0, 0.0, -0.5, -0.5, 1.0, 1.0]:
         w_string = model_name + " D"
     elif w == [1.0, 1.0, 0.5, 0.0, 1.0, 1.0]:
@@ -185,7 +185,7 @@ def draw_causes(cause_dicts, labels):
     category_colors = plt.get_cmap('RdYlGn')(
         np.linspace(0.15, 0.85, data.shape[1]))
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(7,8))
     ax.invert_yaxis()
     ax.xaxis.set_visible(False)
     ax.set_xlim(0, np.sum(data, axis=1).max())
