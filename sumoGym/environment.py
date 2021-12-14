@@ -91,7 +91,7 @@ class SUMOEnvironment(gym.Env):
         self._setup_action_space()
         self._setup_reward_system(reward_type=reward_type)
         self._how_to_select_ego = 'by_name'
-        self.max_num_steps = 200
+        self.max_num_steps = 250
         self.rendering = True if mode == 'human' else False
 
         # Simulation data and constants
@@ -176,7 +176,7 @@ class SUMOEnvironment(gym.Env):
         self._refresh_environment()
         # Init lateral model
         # Setting a starting speed of the ego
-        self.state['speed'] = (self.desired_speed + self.state['speed']) / 2
+        self.state['speed'] = self.state['speed']
 
         if "continuous" in self.type_as:
             self.lateral_model = LateralModel(
