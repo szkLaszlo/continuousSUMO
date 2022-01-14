@@ -867,9 +867,6 @@ class SUMOEnvironment(gym.Env):
         if len(cars_around):
             for car_id, car in cars_around[self.egoID].items():
                 # Move from bumper to  vehicle center
-                fi = car[tc.VAR_ANGLE] - 90
-                x = car[tc.VAR_POSITION][0] - np.cos(fi) * car[tc.VAR_LENGTH] / 2
-                y = car[tc.VAR_POSITION][1] - np.sin(fi) * car[tc.VAR_LENGTH] / 2
 
                 car_state = {'x_position': x,
                              'y_position': y,
