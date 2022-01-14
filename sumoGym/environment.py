@@ -45,6 +45,7 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                     type_as=type_as,
                     reward_type=reward_type,
                     mode=mode,
+                    radar_range=radar_range,
                     save_log_path=save_log_path,
                     change_speed_interval=change_speed_interval,
                     default_w=default_w,
@@ -867,6 +868,9 @@ class SUMOEnvironment(gym.Env):
         if len(cars_around):
             for car_id, car in cars_around[self.egoID].items():
                 # Move from bumper to  vehicle center
+                fi = -1 * (car[tc.VAR_ANGLE] - 90)
+                x = car[tc.VAR_POSITION][0] - np.cos(fi * np.pi / 180) * car[tc.VAR_LENGTH] / 2
+                y = car[tc.VAR_POSITION][1] - np.sin(fi * np.pi / 180) * car[tc.VAR_LENGTH] / 2
 
                 car_state = {'x_position': x,
                              'y_position': y,
@@ -1038,31 +1042,40 @@ class SUMOEnvironment(gym.Env):
         if ego_state is not None:
             obs["ego"] = ego_state
             obs.setdefault("back", {"dx": -self.radar_range[0],
-                                    "dy": -self.radar_range[1],
                                     "speed": 0.0})
             obs.setdefault("front", {"dx": self.radar_range[0],
-                                     "dy": self.radar_range[1],
                                      "speed": 0.0})
-            min_dist_back = -1000
+            obs.setdefault("side", {"dx": 0,
+                                    "speed": 0.0})
+            min_dist_back = 1000
             min_dist_front = 1000
+            side_sensor = 3
             for idx, car in self.env_obs.items():
                 if "ego" in idx:
                     continue
-                dist_from_ego_x = car["x_position"] - ego_state["x_position"]
-                dist_from_ego_y = car["y_position"] - ego_state["y_position"]
-                if car["lane_id"] == ego_state['lane_id'] and min_dist_back < dist_from_ego_x < min_dist_front:
-                    if dist_from_ego_x >= 0:
+                common_length = (car["length"] + ego_state["length"]) / 2
+                dx = abs(car["x_position"] - ego_state["x_position"])
+                dist_from_ego_x = max(0.0, dx - common_length)
+                is_front = car["x_position"] > ego_state["x_position"]
+                if car["lane_id"] == ego_state['lane_id']:
+                    if is_front and min_dist_front > dist_from_ego_x > 0:
                         obs["front"] = {"dx": dist_from_ego_x,
-                                        "dy": dist_from_ego_y,
                                         "speed": car['speed']}
+                        min_dist_front = dist_from_ego_x
 
-                    elif dist_from_ego_x < 0:
-                        obs["back"] = {"dx": dist_from_ego_x,
-                                       "dy": dist_from_ego_y,
+                    elif (not is_front) and min_dist_back > dist_from_ego_x > 0:
+                        obs["back"] = {"dx": -dist_from_ego_x,
                                        "speed": car['speed']}
+                        min_dist_back = dist_from_ego_x
+
+                    elif dist_from_ego_x == 0.0:
+                        obs["side"] = {"dx": int(not is_front) * -1 * dist_from_ego_x + int(is_front) * dist_from_ego_x,
+                                       "speed": car['speed']}
+
             ego_state.update({'desired_speed': self.desired_speed,
                               'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID)),
-                              'route': traci.vehicle.getDistance(self.egoID)/self.total_driving_distance})
+                              'route': traci.vehicle.getDistance(self.egoID) / self.total_driving_distance,
+                              'merged': int(np.isclose(ego_state["heading"], 0))})
 
         return obs, ego_state
 
@@ -1078,15 +1091,16 @@ class SUMOEnvironment(gym.Env):
             obs, ego = self._calculate_merge_observation()
             observation = np.asarray(
                 [obs["back"]["dx"] / self.radar_range[0],
-                 obs["back"]["dy"] / self.radar_range[1],
                  obs["back"]["speed"] / 50,
                  obs["front"]["dx"] / self.radar_range[0],
-                 obs["front"]["dy"] / self.radar_range[1],
                  obs["front"]["speed"] / 50,
+                 obs["side"]["dx"] / 3,
+                 obs["side"]["speed"] / 50,
                  ego["speed"] / 50,
                  ego["desired_speed"] / 50,
                  ego["speed_limit"] / 50,
                  ego["route"],
+                 ego["merged"],
                  self.steps_done / self.max_num_steps
                  ])
 
