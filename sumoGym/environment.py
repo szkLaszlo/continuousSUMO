@@ -225,7 +225,7 @@ class SUMOEnvironment(gym.Env):
             self._get_basic_observation = self._calculate_structured_environment
 
         elif self.type_os == "merge":
-            self.observation_space = gym.spaces.Discrete(11)
+            self.observation_space = gym.spaces.Discrete(12)
             self._get_observation = self._convert_merge_observation_to_vector
             self._get_basic_observation = self._calculate_structured_environment
 
