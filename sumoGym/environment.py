@@ -611,7 +611,10 @@ class SUMOEnvironment(gym.Env):
     def _calculate_speed_reward(self, cause, temp_reward):
         assert temp_reward.get('speed', None) is not None
         dv = abs(self.state['speed'] - self.desired_speed)
-        temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])
+        if self.desired_speed > 0.0:
+            temp_reward["speed"] = self.reward_dict["speed"][1] - dv / max(self.desired_speed, self.state["speed"])
+        else:
+            temp_reward["speed"] = self.reward_dict["speed"][1]
         return temp_reward
 
     def _calculate_cutin_reward(self, cause, temp_reward):
