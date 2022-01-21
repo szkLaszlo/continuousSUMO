@@ -308,7 +308,7 @@ class SUMOEnvironment(gym.Env):
                 # if successful episode
                 'success': [True, 0.0, True],
                 # when causing collision
-                'collision': [True, 1, False],
+                'collision': [True, -1.0, False],
                 # when being too slow
                 'slow': [False, 0.0, False],
                 # negative reward proportional to the difference from v_des
@@ -345,7 +345,7 @@ class SUMOEnvironment(gym.Env):
 
         self.egoID = None  # Resetting chosen ego vehicle id
         self.steps_done = 0  # resetting steps done
-        self.desired_speed = 0 #random.randint(110, 140) / 3.6
+        self.desired_speed = 0  # random.randint(110, 140) / 3.6
         self.state = None
         self.observation = None
         self.env_obs = None
@@ -454,14 +454,13 @@ class SUMOEnvironment(gym.Env):
                 if "lane" in exc.args[0]:
                     cause, reward, terminated = self._get_terminating_events(True, left_=True)
                     self.render()
-                    return self._get_observation(), sum(reward), terminated, {'cause': cause,
-                                                                              'cumulants': reward,
-                                                                              'velocity': self.state['speed'],
-                                                                              'distance': self.state['x_position']
-                                                                                          - self.ego_start_position,
-                                                                              'lane_change': self.lanechange_counter}
-            if self.rendering:
-                sleep(0.05)
+                    state_ = self._get_observation()
+                    return state_, sum(reward), terminated, {'cause': cause,
+                                                             'cumulants': reward,
+                                                             'velocity': self.state['speed'],
+                                                             'distance': self.state['x_position']
+                                                                         - self.ego_start_position,
+                                                             'lane_change': self.lanechange_counter}
 
             traci.simulationStep()
             # getting termination values
@@ -472,13 +471,25 @@ class SUMOEnvironment(gym.Env):
 
             # creating the images if render is true.
             self.render()
+            state_ = self._get_observation()
+            if self.rendering:
+                x, y = self.state["x_position"], self.state["y_position"]
+                display_text = str([f"{i:1.4f} " for i in state_])
+                label_text = f'\n {["back_x", "back_y", "back_s", "front_x", "front_y", "front_s", "side_y", "side_s", "ego_s", "s_limit", "route", "finish"]}'
+                traci.poi.setType("state", display_text)
+                traci.poi.setType("label", label_text)
+                traci.poi.setType("actions", action)
+                traci.poi.setPosition("label", x, y + 20)
+                traci.poi.setPosition("state", x, y + 15)
+                traci.poi.setPosition("actions", x, y - 10)
+                sleep(0.05)
 
-            return self._get_observation(), sum(reward), terminated, {'cause': cause,
-                                                                      'cumulants': reward,
-                                                                      'velocity': self.state['speed'],
-                                                                      'distance': self.state['x_position']
-                                                                                  - self.ego_start_position,
-                                                                      'lane_change': self.lanechange_counter}
+            return state_, sum(reward), terminated, {'cause': cause,
+                                                     'cumulants': reward,
+                                                     'velocity': self.state['speed'],
+                                                     'distance': self.state['x_position']
+                                                                 - self.ego_start_position,
+                                                     'lane_change': self.lanechange_counter}
         else:
             raise RuntimeError('After terminated episode, reset is needed. '
                                'Please run env.reset() before starting a new episode.')
@@ -730,6 +741,10 @@ class SUMOEnvironment(gym.Env):
                                                                                                  "type"] else 0.0
                 if self.rendering:
                     traci.gui.trackVehicle('View #0', self.egoID)
+                    x, y = traci.vehicle.getPosition(self.egoID)
+                    traci.poi.add("state", x, y + 15, (1, 1, 1, 1))
+                    traci.poi.add("label", x, y + 20, (1, 1, 1, 1))
+                    traci.poi.add("actions", x, y - 10, (1, 1, 1, 1))
         else:
             traci.simulationStep()
 
@@ -1045,40 +1060,47 @@ class SUMOEnvironment(gym.Env):
         if ego_state is not None:
             obs["ego"] = ego_state
             obs.setdefault("back", {"dx": -self.radar_range[0],
+                                    "dy": self.radar_range[1],
                                     "speed": 0.0})
             obs.setdefault("front", {"dx": self.radar_range[0],
+                                     "dy": self.radar_range[1],
                                      "speed": 0.0})
             obs.setdefault("side", {"dx": 0,
+                                    "dy": self.radar_range[1],
                                     "speed": 0.0})
             min_dist_back = 1000
             min_dist_front = 1000
-            side_sensor = 3
+
             for idx, car in self.env_obs.items():
                 if "ego" in idx:
                     continue
-                common_length = (car["length"] + ego_state["length"]) / 2
+                common_length_x = (car["length"] + ego_state["length"]) / 2
+                common_length_y = (car["width"] + ego_state["width"]) / 2
                 dx = abs(car["x_position"] - ego_state["x_position"])
-                dist_from_ego_x = max(0.0, dx - common_length)
+                dy = abs(car["y_position"] - ego_state["y_position"])
+                dist_from_ego_x = max(0.0, dx - common_length_x)
+                dist_from_ego_y = max(0.0, dy - common_length_y)
                 is_front = car["x_position"] > ego_state["x_position"]
                 if car["lane_id"] == ego_state['lane_id']:
                     if is_front and min_dist_front > dist_from_ego_x > 0:
                         obs["front"] = {"dx": dist_from_ego_x,
+                                        "dy": dist_from_ego_y,
                                         "speed": car['speed']}
                         min_dist_front = dist_from_ego_x
 
                     elif (not is_front) and min_dist_back > dist_from_ego_x > 0:
                         obs["back"] = {"dx": -dist_from_ego_x,
+                                       "dy": dist_from_ego_y,
                                        "speed": car['speed']}
                         min_dist_back = dist_from_ego_x
 
                     elif dist_from_ego_x == 0.0:
-                        obs["side"] = {"dx": int(not is_front) * -1 * dist_from_ego_x + int(is_front) * dist_from_ego_x,
+                        obs["side"] = {"dx": dist_from_ego_x,
+                                       "dy": dist_from_ego_y,
                                        "speed": car['speed']}
 
-            ego_state.update({'desired_speed': self.desired_speed,
-                              'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID)),
-                              'route': traci.vehicle.getDistance(self.egoID) / self.total_driving_distance,
-                              'merged': int(np.isclose(ego_state["heading"], 0))})
+            ego_state.update({'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID)),
+                              'route': traci.vehicle.getDistance(self.egoID) / self.total_driving_distance})
 
         return obs, ego_state
 
@@ -1094,16 +1116,16 @@ class SUMOEnvironment(gym.Env):
             obs, ego = self._calculate_merge_observation()
             observation = np.asarray(
                 [obs["back"]["dx"] / self.radar_range[0],
+                 obs["back"]["dy"] / self.radar_range[1],
                  obs["back"]["speed"] / 50,
                  obs["front"]["dx"] / self.radar_range[0],
+                 obs["front"]["dy"] / self.radar_range[1],
                  obs["front"]["speed"] / 50,
-                 obs["side"]["dx"] / 3,
+                 obs["side"]["dy"] / self.radar_range[1],
                  obs["side"]["speed"] / 50,
                  ego["speed"] / 50,
-                 ego["desired_speed"] / 50,
                  ego["speed_limit"] / 50,
                  ego["route"],
-                 ego["merged"],
                  self.steps_done / self.max_num_steps
                  ])
 
