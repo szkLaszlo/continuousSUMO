@@ -462,6 +462,8 @@ class SUMOEnvironment(gym.Env):
                                                                          - self.ego_start_position,
                                                              'lane_change': self.lanechange_counter}
 
+            self.display_text_on_gui(name="actions",  text=action, loc=(0, - 10))
+
             traci.simulationStep()
             # getting termination values
             cause, reward, terminated = self._get_terminating_events(is_lane_change)
@@ -473,15 +475,9 @@ class SUMOEnvironment(gym.Env):
             self.render()
             state_ = self._get_observation()
             if self.rendering:
-                x, y = self.state["x_position"], self.state["y_position"]
                 display_text = str([f"{i:1.4f} " for i in state_])
-                label_text = f'\n {["back_x", "back_y", "back_s", "front_x", "front_y", "front_s", "side_y", "side_s", "ego_s", "s_limit", "route", "finish"]}'
-                traci.poi.setType("state", display_text)
-                traci.poi.setType("label", label_text)
-                traci.poi.setType("actions", action)
-                traci.poi.setPosition("label", x, y + 20)
-                traci.poi.setPosition("state", x, y + 15)
-                traci.poi.setPosition("actions", x, y - 10)
+                self.display_text_on_gui(name="label",  loc=(0, 18))
+                self.display_text_on_gui(name="state",  text=display_text, loc=(0, 15))
                 sleep(0.05)
 
             return state_, sum(reward), terminated, {'cause': cause,
@@ -493,6 +489,18 @@ class SUMOEnvironment(gym.Env):
         else:
             raise RuntimeError('After terminated episode, reset is needed. '
                                'Please run env.reset() before starting a new episode.')
+
+    def display_text_on_gui(self, name, text=None, loc=None, rel_to_ego=True):
+        if self.rendering:
+            if name not in traci.poi.getIDList():
+                traci.poi.add(poiID=name, x=0, y=0, color=(1, 1, 1, 1), poiType="")
+            if text is not None:
+                traci.poi.setType(poiID=name, poiType=text)
+            if loc is not None:
+                x, y = 0.0, 0.0
+                if rel_to_ego:
+                    x, y = self.state["x_position"], self.state["y_position"]
+                traci.poi.setPosition(name, x + loc[0], y + loc[1])
 
     def _get_terminating_events(self, is_lane_change, left_=False):
         """
@@ -744,6 +752,8 @@ class SUMOEnvironment(gym.Env):
                     x, y = traci.vehicle.getPosition(self.egoID)
                     traci.poi.add("state", x, y + 15, (1, 1, 1, 1))
                     traci.poi.add("label", x, y + 20, (1, 1, 1, 1))
+                    traci.poi.setType("label",
+                                      f'{["back_x", "back_y", "back_s", "front_x", "front_y", "front_s", "side_y", "side_s", "ego_s", "s_limit", "route", "finish"]}')
                     traci.poi.add("actions", x, y - 10, (1, 1, 1, 1))
         else:
             traci.simulationStep()
@@ -1177,7 +1187,6 @@ class SUMOEnvironment(gym.Env):
                     reward.append(value)
 
         elif isinstance(temp_reward, (np.ndarray, int)):
-            reward = []
             for idx, value in self.reward_dict.items():
                 if isinstance(value, list) and value[2]:
                     reward.append(value[1])
