@@ -16,6 +16,8 @@ services:
     - QT_X11_NO_MITSHM=1
     - USER=$USER
     - UID=$UID
+    - HOST_USER=$USER
+    - HOST_UID=$UID
     - _JAVA_OPTIONS=-Duser.home=/home/$USER/    # for Java based apps, i.e. PyCharm, CLion
     - NVIDIA_VISIBLE_DEVICES=all
     entrypoint: ["/entry.sh","true"]
