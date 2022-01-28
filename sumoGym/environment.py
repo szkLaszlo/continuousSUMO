@@ -225,7 +225,7 @@ class SUMOEnvironment(gym.Env):
             self._get_basic_observation = self._calculate_structured_environment
 
         elif self.type_os == "merge":
-            self.observation_space = gym.spaces.Discrete(12)
+            self.observation_space = gym.spaces.Discrete(11)
             self._get_observation = self._convert_merge_observation_to_vector
             self._get_basic_observation = self._calculate_structured_environment
 
@@ -747,6 +747,11 @@ class SUMOEnvironment(gym.Env):
                                                                                final_pos) if "merge" in \
                                                                                              self.reward_dict[
                                                                                                  "type"] else 0.0
+                start_edge = traci.vehicle.getRoute(self.egoID)[0]
+                self.total_route = traci.simulation.getDistanceRoad(edgeID1=start_edge, pos1=0,
+                                                                    edgeID2=final_edge, pos2=final_pos,
+                                                                    isDriving=True)
+
                 if self.rendering:
                     traci.gui.trackVehicle('View #0', self.egoID)
                     x, y = traci.vehicle.getPosition(self.egoID)
@@ -1108,9 +1113,9 @@ class SUMOEnvironment(gym.Env):
                         obs["side"] = {"dx": dist_from_ego_x,
                                        "dy": dist_from_ego_y,
                                        "speed": car['speed']}
-
+            route_done = (1-self.total_driving_distance/self.total_route) + traci.vehicle.getDistance(self.egoID)/self.total_route
             ego_state.update({'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID)),
-                              'route': traci.vehicle.getDistance(self.egoID) / self.total_driving_distance})
+                              'route': route_done})
 
         return obs, ego_state
 
@@ -1136,7 +1141,6 @@ class SUMOEnvironment(gym.Env):
                  ego["speed"] / 50,
                  ego["speed_limit"] / 50,
                  ego["route"],
-                 self.steps_done / self.max_num_steps
                  ])
 
         else:
