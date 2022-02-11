@@ -758,7 +758,7 @@ class SUMOEnvironment(gym.Env):
                     traci.poi.add("state", x, y + 15, (1, 1, 1, 1))
                     traci.poi.add("label", x, y + 20, (1, 1, 1, 1))
                     traci.poi.setType("label",
-                                      f'{["back_x", "back_y", "back_s", "front_x", "front_y", "front_s", "side_y", "side_s", "ego_s", "s_limit", "route", "finish"]}')
+                                      f'{["back_x", "back_y", "back_s", "front_x", "front_y", "front_s", "side_y", "side_s", "ego_s", "s_limit", "route"]}')
                     traci.poi.add("actions", x, y - 10, (1, 1, 1, 1))
         else:
             traci.simulationStep()
