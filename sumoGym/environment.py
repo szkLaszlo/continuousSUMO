@@ -423,7 +423,8 @@ class SUMOEnvironment(gym.Env):
         # Selecting action to do
         steering_angle, velocity_dif = self.calculate_action(action)
         # setting speed for the vehicle
-        traci.vehicle.setSpeed(self.egoID, min(self.state['speed'] + velocity_dif, 50))
+        cur_speed = min(max(0, self.state['speed'] + velocity_dif), 50)
+        traci.vehicle.setSpeed(self.egoID, cur_speed)
         if steering_angle != 0:
             lane = traci.vehicle.getLaneIndex(self.egoID)
             lane += steering_angle
