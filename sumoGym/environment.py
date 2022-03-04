@@ -520,12 +520,12 @@ class SUMOEnvironment(gym.Env):
             self.egoID = None
             self.observation = None
 
-        elif np.isclose(self.state["heading"], 0.0):
-            cause = None
-            temp_reward['success'] = self.reward_dict["success"][1]
-            terminated = True
-            self.egoID = None
-            self.observation = None
+        # elif np.isclose(self.state["heading"], 0.0):
+        #     cause = None
+        #     temp_reward['success'] = self.reward_dict["success"][1]
+        #     terminated = True
+        #     self.egoID = None
+        #     self.observation = None
 
         # Checking abnormal cases for ego (if events happened which terminate the simulation)
         elif self.egoID in traci.simulation.getArrivedIDList() and self.state['x_position'] >= self.end_zone - 10:
