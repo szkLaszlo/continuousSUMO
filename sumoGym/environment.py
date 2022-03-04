@@ -308,7 +308,7 @@ class SUMOEnvironment(gym.Env):
                 # if successful episode
                 'success': [True, 0.0, True],
                 # when causing collision
-                'collision': [True, -1.0, False],
+                'collision': [True, 1.0, False],
                 # when being too slow
                 'slow': [False, 0.0, False],
                 # negative reward proportional to the difference from v_des
@@ -607,7 +607,7 @@ class SUMOEnvironment(gym.Env):
         lane_speed = traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID))  # in m/s
         speeding = cur_speed - lane_speed
         if speeding > 0:
-            temp_reward['speeding'] = temp_reward['speeding'][1] - speeding / lane_speed
+            temp_reward['speeding'] = temp_reward['speeding'][1] + speeding / lane_speed
         else:
             temp_reward['speeding'] = temp_reward['speeding'][1]
         return temp_reward
