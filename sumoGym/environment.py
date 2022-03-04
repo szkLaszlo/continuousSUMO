@@ -314,7 +314,7 @@ class SUMOEnvironment(gym.Env):
                 # negative reward proportional to the difference from v_des
                 'speed': [False, 0.0, False],
                 # negative reward proportional to speeding
-                'speeding': [False, 0.0, True],
+                'speeding': [False, 0.0, False],
                 # negative reward proportional to speeding
                 'completion': [False, 0.0, True],
                 # whenever closer than required follow distance,
