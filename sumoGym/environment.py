@@ -133,6 +133,7 @@ class SUMOEnvironment(gym.Env):
                         # "--lateral-resolution", "0.8",
                         "--collision.mingap-factor", "0",
                         "--collision.action", "remove",
+                        "--no-step-log",
                         "--no-warnings", "1",
                         ]
 
