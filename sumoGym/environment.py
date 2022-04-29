@@ -346,7 +346,7 @@ class SUMOEnvironment(gym.Env):
 
         self.egoID = None  # Resetting chosen ego vehicle id
         self.steps_done = 0  # resetting steps done
-        self.desired_speed = 0  # random.randint(110, 140) / 3.6
+        self.desired_speed = random.randint(0, 30) / 3.6
         self.state = None
         self.observation = None
         self.env_obs = None
