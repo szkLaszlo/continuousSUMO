@@ -346,7 +346,7 @@ class SUMOEnvironment(gym.Env):
 
         self.egoID = None  # Resetting chosen ego vehicle id
         self.steps_done = 0  # resetting steps done
-        self.desired_speed = 0  # random.randint(110, 140) / 3.6
+        self.desired_speed = random.randint(10, 40) / 3.6
         self.state = None
         self.observation = None
         self.env_obs = None
@@ -469,7 +469,7 @@ class SUMOEnvironment(gym.Env):
             traci.simulationStep()
             # getting termination values
             cause, reward, terminated = self._get_terminating_events(is_lane_change)
-
+            assert any(reward >= 0)
             if self.time_to_change_des_speed is not None and self.steps_done % self.time_to_change_des_speed == 0:
                 self._set_random_desired_speed()
 
@@ -1083,7 +1083,7 @@ class SUMOEnvironment(gym.Env):
         obs = {}
         if ego_state is not None:
             obs["ego"] = ego_state
-            obs.setdefault("back", {"dx": -self.radar_range[0],
+            obs.setdefault("back", {"dx": self.radar_range[0],
                                     "dy": self.radar_range[1],
                                     "speed": 0.0})
             obs.setdefault("front", {"dx": self.radar_range[0],
@@ -1113,7 +1113,7 @@ class SUMOEnvironment(gym.Env):
                         min_dist_front = dist_from_ego_x
 
                     elif (not is_front) and min_dist_back > dist_from_ego_x > 0:
-                        obs["back"] = {"dx": -dist_from_ego_x,
+                        obs["back"] = {"dx": dist_from_ego_x,
                                        "dy": dist_from_ego_y,
                                        "speed": car['speed']}
                         min_dist_back = dist_from_ego_x
