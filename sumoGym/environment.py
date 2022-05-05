@@ -1083,7 +1083,7 @@ class SUMOEnvironment(gym.Env):
         obs = {}
         if ego_state is not None:
             obs["ego"] = ego_state
-            obs.setdefault("back", {"dx": self.radar_range[0],
+            obs.setdefault("back", {"dx": -self.radar_range[0],
                                     "dy": self.radar_range[1],
                                     "speed": 0.0})
             obs.setdefault("front", {"dx": self.radar_range[0],
@@ -1113,7 +1113,7 @@ class SUMOEnvironment(gym.Env):
                         min_dist_front = dist_from_ego_x
 
                     elif (not is_front) and min_dist_back > dist_from_ego_x > 0:
-                        obs["back"] = {"dx": dist_from_ego_x,
+                        obs["back"] = {"dx": -dist_from_ego_x,
                                        "dy": dist_from_ego_y,
                                        "speed": car['speed']}
                         min_dist_back = dist_from_ego_x
