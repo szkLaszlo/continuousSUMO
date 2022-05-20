@@ -346,7 +346,7 @@ class SUMOEnvironment(gym.Env):
 
         self.egoID = None  # Resetting chosen ego vehicle id
         self.steps_done = 0  # resetting steps done
-        self.desired_speed = random.randint(0, 100) / 3.6
+        self.desired_speed = 0  # the merging point is [130, -5.0]
         self.state = None
         self.observation = None
         self.env_obs = None
@@ -393,6 +393,9 @@ class SUMOEnvironment(gym.Env):
             self.stop()
             self.start()
             raise RuntimeError
+
+    def calculate_max_speed(self, distance):
+        return np.sqrt(self.accel_constant[0] * -2 * 10 * distance) #  decel x -2 * second * distance
 
     def _continuous_step(self, action):
         # Selecting action to do
@@ -464,7 +467,7 @@ class SUMOEnvironment(gym.Env):
                                                                          - self.ego_start_position,
                                                              'lane_change': self.lanechange_counter}
 
-            self.display_text_on_gui(name="actions",  text=action, loc=(0, - 10))
+            self.display_text_on_gui(name="actions", text=action, loc=(0, - 10))
 
             traci.simulationStep()
             # getting termination values
@@ -478,8 +481,8 @@ class SUMOEnvironment(gym.Env):
             state_ = self._get_observation()
             if self.rendering:
                 display_text = str([f"{i:1.4f} " for i in state_])
-                self.display_text_on_gui(name="label",  loc=(0, 18))
-                self.display_text_on_gui(name="state",  text=display_text, loc=(0, 15))
+                self.display_text_on_gui(name="label", loc=(0, 18))
+                self.display_text_on_gui(name="state", text=display_text, loc=(0, 15))
                 sleep(0.05)
 
             return state_, sum(reward), terminated, {'cause': cause,
@@ -740,8 +743,10 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setColor(self.egoID, (255, 0, 0))
 
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
-                traci.vehicle.setSpeed(self.egoID, (traci.vehicle.getSpeed(
-                    self.egoID) + self.desired_speed) / 2)
+                ego_pos = traci.vehicle.getPosition(self.egoID)
+                dist_ = np.sqrt((ego_pos[0]-130)**2 + (ego_pos[1] - 5)**2)
+                max_speed = random.randint(0, np.ceil(self.calculate_max_speed(dist_)))
+                traci.vehicle.setSpeed(self.egoID, max_speed)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
                 traci.vehicle.subscribeContext(self.egoID, tc.CMD_GET_VEHICLE_VARIABLE, dist=self.radar_range[0],
@@ -1122,7 +1127,8 @@ class SUMOEnvironment(gym.Env):
                         obs["side"] = {"dx": dist_from_ego_x,
                                        "dy": dist_from_ego_y,
                                        "speed": car['speed']}
-            route_done = (1-self.total_driving_distance/self.total_route) + traci.vehicle.getDistance(self.egoID)/self.total_route
+            route_done = (1 - self.total_driving_distance / self.total_route) + traci.vehicle.getDistance(
+                self.egoID) / self.total_route
             ego_state.update({'speed_limit': traci.lane.getMaxSpeed(traci.vehicle.getLaneID(self.egoID)),
                               'route': route_done})
 
