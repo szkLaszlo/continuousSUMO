@@ -13,7 +13,7 @@ import cv2
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
-import traci
+import libsumo as traci
 import traci.constants as tc
 from gym import spaces
 from traci import TraCIException, FatalTraCIError
