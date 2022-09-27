@@ -745,7 +745,7 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
                 ego_pos = traci.vehicle.getPosition(self.egoID)
                 dist_ = np.sqrt((ego_pos[0]-130)**2 + (ego_pos[1] - 5)**2)
-                max_speed = random.randint(0, np.ceil(self.calculate_max_speed(dist_)))
+                max_speed = 0#random.randint(0, np.ceil(self.calculate_max_speed(dist_)))
                 traci.vehicle.setSpeed(self.egoID, max_speed)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
@@ -843,7 +843,7 @@ class SUMOEnvironment(gym.Env):
         Function to set random speed of ego(s)
         """
         # TODO: make this work for more ego
-        self.desired_speed = random.randint(110, 140) / 3.6
+        self.desired_speed = 0  # random.randint(110, 140) / 3.6
 
     def _calculate_discrete_action(self, action):
         """
