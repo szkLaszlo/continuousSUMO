@@ -9,7 +9,6 @@ import platform
 import random
 from time import sleep
 
-import cv2
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,6 +18,7 @@ from gym import spaces
 from traci import TraCIException, FatalTraCIError
 
 from continuousSUMO.sumoGym.model import LateralModel
+from fastcl.utils.utils import rescale_image, save_images_to_video
 
 
 def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
@@ -72,7 +72,6 @@ class SUMOEnvironment(gym.Env):
 
         super(SUMOEnvironment, self).__init__()
         self.render_mode = mode
-        self.save_path = None
         self.name = "SuMoGyM"
         np.random.seed(seed if seed is not None else 42)
         self.seed_ = seed
@@ -93,7 +92,8 @@ class SUMOEnvironment(gym.Env):
         self._setup_reward_system(reward_type=reward_type)
         self._how_to_select_ego = 'by_name'
         self.max_num_steps = 250
-        self.rendering = True if mode == 'human' else False
+        self.rendering = True if mode in ['human', "video"] else False
+        self.video_history = [] if self.rendering else None
 
         # Simulation data and constants
         self.sumoBinary = None
@@ -186,7 +186,8 @@ class SUMOEnvironment(gym.Env):
                 lane_width=self.lane_width,
                 dt=self.dt
             )
-
+        if self.video_history is not None:
+            self.video_history = []
         return self._get_observation()
 
     def seed(self, seed=None):
@@ -356,31 +357,30 @@ class SUMOEnvironment(gym.Env):
         self.last_driven_kms = 0
 
     def render(self, mode="human"):
-
-        if self.render_mode == 'plot':
+        if self.rendering:
             img = self._calculate_image_environment(False)
             img = img.transpose((1, 2, 0))
-            if self.save_path is not None:
-                dir_name = os.path.split(self.save_path)[0]
-                if not os.path.exists(dir_name):
-                    os.makedirs(dir_name)
-                im = np.zeros((90, 500, 3))
-                scale_x = int(np.ceil(im.shape[0] // img.shape[0]))
-                scale_y = int(np.ceil(im.shape[1] // img.shape[1]))
-                for k in range(0, im.shape[0], scale_x):
-                    for j in range(0, im.shape[1], scale_y):
-                        value = img[k // scale_x, j // scale_y]
 
-                        im[k:k + scale_x, j:j + scale_y] = value * 255 * np.ones_like(
-                            (im[k:k + scale_x, j:j + scale_y]))
-                cv2.imwrite(f"{self.save_path}_img{self.steps_done}.jpg", img=im)
-            else:
+            scale_x = int(np.ceil(90 // img.shape[0]))
+            scale_y = int(np.ceil(500 // img.shape[1]))
+            im = rescale_image(img, scale_x, scale_y)
+            if self.video_history is not None:
+                self.video_history.append(im)
+
+            if self.render_mode == 'human':
                 plt.imshow(img)
                 plt.show()
 
-    def set_render(self, mode, save_path=None):
-        self.render_mode = mode
-        self.save_path = save_path
+    def save_episode(self, path, video_name="video.avi",
+                     frame_rate=10, scale_percent=1):
+        if self.video_history is not None:
+            if not os.path.exists(path):
+                os.makedirs(path)
+            img = self.video_history[0]
+            width = int(img.shape[1] * scale_percent)
+            height = int(img.shape[0] * scale_percent)
+            dim = (width, height)
+            save_images_to_video(self.video_history, path, video_name, frame_rate, dim)
 
     def step(self, action):
         try:
@@ -395,7 +395,7 @@ class SUMOEnvironment(gym.Env):
             raise RuntimeError
 
     def calculate_max_speed(self, distance):
-        return np.sqrt(self.accel_constant[0] * -2 * 10 * distance) #  decel x -2 * second * distance
+        return np.sqrt(self.accel_constant[0] * -2 * 10 * distance)  # decel x -2 * second * distance
 
     def _continuous_step(self, action):
         # Selecting action to do
@@ -744,7 +744,7 @@ class SUMOEnvironment(gym.Env):
 
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
                 ego_pos = traci.vehicle.getPosition(self.egoID)
-                dist_ = np.sqrt((ego_pos[0]-130)**2 + (ego_pos[1] - 5)**2)
+                dist_ = np.sqrt((ego_pos[0] - 130) ** 2 + (ego_pos[1] - 5) ** 2)
                 max_speed = random.randint(0, np.ceil(self.calculate_max_speed(dist_)))
                 traci.vehicle.setSpeed(self.egoID, max_speed)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
