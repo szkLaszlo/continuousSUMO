@@ -10,15 +10,15 @@ import random
 from time import sleep
 
 import gym
-import matplotlib.pyplot as plt
 import numpy as np
-import libsumo as traci
+import traci
 import traci.constants as tc
 from gym import spaces
+from matplotlib import pyplot as plt
 from traci import TraCIException, FatalTraCIError
 
 from continuousSUMO.sumoGym.model import LateralModel
-from fastcl.utils.utils import rescale_image, save_images_to_video
+from fastcl.utils.utils import save_images_to_video, rescale_image
 
 
 def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
@@ -361,14 +361,14 @@ class SUMOEnvironment(gym.Env):
             img = self._calculate_image_environment(False)
             img = img.transpose((1, 2, 0))
 
-            scale_x = int(np.ceil(90 // img.shape[0]))
-            scale_y = int(np.ceil(500 // img.shape[1]))
+            scale_x = 2  # int(np.ceil(90 // img.shape[0]))
+            scale_y = 2 # int(np.ceil(500 // img.shape[1]))
             im = rescale_image(img, scale_x, scale_y)
             if self.video_history is not None:
                 self.video_history.append(im)
 
             if self.render_mode == 'human':
-                plt.imshow(img)
+                plt.imshow(im)
                 plt.show()
 
     def save_episode(self, path, video_name="video.avi",
@@ -543,6 +543,7 @@ class SUMOEnvironment(gym.Env):
         elif self.egoID in traci.simulation.getCollidingVehiclesIDList():  # or self._check_collision( environment_collection):
             cause = "collision"
             temp_reward['success'] = self.reward_dict[cause][1]
+            # print(f'episode failed with seed {self.sumoCmd[self.sumoCmd.index("--seed") + 1]}')
             terminated = True
             self.egoID = None
             self.observation = None
@@ -953,13 +954,12 @@ class SUMOEnvironment(gym.Env):
             if (abs(dx) < (self.x_range_grid - self.env_obs[car_id]['length'] / 2 * self.grid_per_meter)) \
                     and abs(dy) < (
                     self.y_range_grid - self.env_obs[car_id]['width'] / 2 * self.grid_per_meter):
-
                 # Drawing speed of the current car
                 velocity = self.env_obs[car_id]['speed'] / 50
-                if self.egoID == car_id:
-                    velocity = 1 - abs(self.env_obs[car_id]['speed'] - self.desired_speed) / max(self.desired_speed,
-                                                                                                 self.env_obs[car_id][
-                                                                                                     "speed"])
+                # if self.egoID == car_id:
+                #     velocity = 1 - abs(self.env_obs[car_id]['speed'] - self.desired_speed) / max(self.desired_speed,
+                #                                                                                   self.env_obs[car_id][
+                #                                                                                       "speed"])
                 observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
                 self.y_range_grid + dy - w:self.y_range_grid + dy + w] += np.ones_like(
                     observation[0, self.x_range_grid + dx - l:self.x_range_grid + dx + l,
