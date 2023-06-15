@@ -105,7 +105,7 @@ class SUMOEnvironment(gym.Env):
             os.makedirs(self.save_log_path)
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
-        self.default_w = np.asarray(default_w) if default_w is not None else np.ones_like(self.get_max_reward(1))
+        self.default_w = np.asarray(default_w, dtype=np.float32) if default_w is not None else np.ones_like(self.get_max_reward(1))
 
         self.start()
         self.reset()
@@ -574,7 +574,7 @@ class SUMOEnvironment(gym.Env):
 
         temp_reward = self._get_rewards(cause, is_lane_change, temp_reward)
         # constructing the reward vector
-        reward = self.get_max_reward(temp_reward) * self.default_w
+        reward = np.float32(self.get_max_reward(temp_reward) * self.default_w)
 
         return cause, reward, terminated
 
