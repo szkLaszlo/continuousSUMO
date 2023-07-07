@@ -31,7 +31,8 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                           save_log_path=None,
                           change_speed_interval=100,
                           default_w=None,
-                          seed=None):
+                          seed=None,
+                          use_random_speed=False):
     """
     This function creates the gym environment. It is used for initiating the continuousSUMO package.
     """
@@ -49,7 +50,8 @@ def makeContinuousSumoEnv(env_name='SUMOEnvironment-v0',
                     save_log_path=save_log_path,
                     change_speed_interval=change_speed_interval,
                     default_w=default_w,
-                    seed=seed)
+                    seed=seed,
+                    use_random_speed=use_random_speed)
 
 
 class SUMOEnvironment(gym.Env):
@@ -68,7 +70,8 @@ class SUMOEnvironment(gym.Env):
                  save_log_path=None,
                  change_speed_interval=100,
                  default_w=None,
-                 seed=None):
+                 seed=None,
+                 use_random_speed=False):
 
         super(SUMOEnvironment, self).__init__()
         self.render_mode = mode
@@ -106,6 +109,7 @@ class SUMOEnvironment(gym.Env):
         # variable for desired speed random change (after x time steps)
         self.time_to_change_des_speed = change_speed_interval
         self.default_w = np.asarray(default_w, dtype=np.float32) if default_w is not None else np.ones_like(self.get_max_reward(1))
+        self.use_random_speed = use_random_speed
 
         self.start()
         self.reset()
@@ -483,7 +487,7 @@ class SUMOEnvironment(gym.Env):
                 display_text = str([f"{i:1.4f} " for i in state_])
                 self.display_text_on_gui(name="label", loc=(0, 18))
                 self.display_text_on_gui(name="state", text=display_text, loc=(0, 15))
-                sleep(0.05)
+                # sleep(0.05)
 
             return state_, sum(reward), terminated, {'cause': cause,
                                                      'cumulants': reward,
@@ -746,7 +750,8 @@ class SUMOEnvironment(gym.Env):
                 traci.vehicle.setSpeedFactor(self.egoID, 2)
                 ego_pos = traci.vehicle.getPosition(self.egoID)
                 dist_ = np.sqrt((ego_pos[0] - 130) ** 2 + (ego_pos[1] - 5) ** 2)
-                max_speed = random.randint(0, np.ceil(self.calculate_max_speed(dist_)))
+                max_speed = random.randint(0, np.ceil(self.calculate_max_speed(dist_))) if self.use_random_speed else \
+                    0.
                 traci.vehicle.setSpeed(self.egoID, max_speed)
                 traci.vehicle.setMaxSpeed(self.egoID, 50)
 
